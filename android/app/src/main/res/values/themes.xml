@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.SahuSales" parent="android:Theme.Material.Light.NoActionBar"/>
+    <style name="Theme.SahuSales.Alarm" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowShowWhenLocked">true</item>
+        <item name="android:windowDismissKeyguard">true</item>
+    </style>
+</resources>

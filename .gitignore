@@ -1,0 +1,17 @@
+# Backend
+backend/.env.local
+backend/node_modules/
+backend/.next/
+backend/.vercel/
+
+# Android
+android/local.properties
+android/.gradle/
+android/app/build/
+android/build/
+*.keystore
+*.jks
+
+# General
+.DS_Store
+Thumbs.db
