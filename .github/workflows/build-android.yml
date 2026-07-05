@@ -30,8 +30,11 @@ jobs:
           echo "sdk.dir=$ANDROID_SDK_ROOT" > android/local.properties
 
       - name: Write Config.kt with backend URL
+        env:
+          BACKEND_URL: ${{ secrets.BACKEND_URL }}
         run: |
-          sed -i 's|https://sahu-sales-backend.vercel.app|${{ secrets.BACKEND_URL || "https://sahu-sales-backend.vercel.app" }}|g' \
+          URL="${BACKEND_URL:-https://sahu-sales-backend.vercel.app}"
+          sed -i "s|https://sahu-sales-backend.vercel.app|${URL}|g" \
             android/app/src/main/java/in/getdownfoundation/sahusales/core/Config.kt
 
       - name: Setup Gradle
