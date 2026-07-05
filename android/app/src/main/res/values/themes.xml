@@ -1,8 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <style name="Theme.SahuSales" parent="android:Theme.Material.Light.NoActionBar"/>
+    <!-- windowShowWhenLocked and windowDismissKeyguard are set programmatically
+         in AlarmActivity.kt via setShowWhenLocked/setTurnScreenOn (API 27+ path)
+         and window flags (API 26 fallback). Do NOT add them here as XML attributes
+         require API 27 which conflicts with minSdk=26. -->
     <style name="Theme.SahuSales.Alarm" parent="android:Theme.Material.Light.NoActionBar">
-        <item name="android:windowShowWhenLocked">true</item>
-        <item name="android:windowDismissKeyguard">true</item>
+        <item name="android:windowTranslucentStatus">true</item>
     </style>
 </resources>
