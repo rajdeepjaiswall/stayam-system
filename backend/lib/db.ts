@@ -1,6 +1,14 @@
 import { neon } from '@neondatabase/serverless';
 
-// neon() is lazy — it does not connect at module load time.
-// The actual DB connection happens only when sql`` is called inside a route handler,
-// so DATABASE_URL only needs to be present at request time (not build time).
-export const sql = neon(process.env.DATABASE_URL!);
+// Lazily initialize neon so DATABASE_URL is only needed at request time, not build time.
+let _sql: ReturnType<typeof neon> | null = null;
+function getDb() {
+  if (!_sql) { _sql = neon(process.env.DATABASE_URL!); }
+  return _sql;
+}
+export const sql = new Proxy(
+  function (strings: TemplateStringsArray, ...values: unknown[]) {
+    return getDb()(strings, ...values);
+  } as ReturnType<typeof neon>,
+  { get(_t, prop) { return (getDb() as any)[prop]; } }
+);
