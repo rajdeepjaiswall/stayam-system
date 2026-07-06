@@ -7,8 +7,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -23,6 +25,8 @@ import `in`.getdownfoundation.sahusales.ui.theme.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.text.SimpleDateFormat
+import java.util.*
 
 @Composable
 fun EventsScreen(viewModel: MainViewModel) {
@@ -47,23 +51,21 @@ fun EventsScreen(viewModel: MainViewModel) {
         }
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
-            Text("Events", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Primary, modifier = Modifier.padding(16.dp))
+            Text("Events", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Primary,
+                modifier = Modifier.padding(16.dp))
 
-            // Status filter tabs
             ScrollableTabRow(
-                selectedTabIndex = listOf(null, "upcoming", "completed", "cancelled").indexOf(selectedStatus).coerceAtLeast(0),
+                selectedTabIndex = listOf(null, "upcoming", "completed", "cancelled")
+                    .indexOf(selectedStatus).coerceAtLeast(0),
                 containerColor = Surface,
                 contentColor = Primary,
                 edgePadding = 8.dp
             ) {
                 listOf("All" to null, "Upcoming" to "upcoming", "Completed" to "completed", "Cancelled" to "cancelled")
-                    .forEachIndexed { i, (label, status) ->
+                    .forEachIndexed { _, (label, status) ->
                         Tab(
                             selected = selectedStatus == status,
-                            onClick = {
-                                selectedStatus = status
-                                viewModel.loadEvents(status)
-                            }
+                            onClick = { selectedStatus = status; viewModel.loadEvents(status) }
                         ) {
                             Text(label, modifier = Modifier.padding(vertical = 12.dp, horizontal = 8.dp))
                         }
@@ -124,12 +126,14 @@ fun EventCard(event: Event) {
         elevation = CardDefaults.cardElevation(2.dp)
     ) {
         Row(Modifier.fillMaxWidth()) {
-            Box(Modifier.width(5.dp).fillMaxHeight().background(statusColor, RoundedCornerShape(topStart = 12.dp, bottomStart = 12.dp)))
+            Box(Modifier.width(5.dp).fillMaxHeight()
+                .background(statusColor, RoundedCornerShape(topStart = 12.dp, bottomStart = 12.dp)))
             Column(Modifier.padding(12.dp).weight(1f)) {
                 Row {
                     event.tagName?.let {
                         Surface(color = tagColor.copy(alpha = 0.15f), shape = RoundedCornerShape(50)) {
-                            Text(it.uppercase(), fontSize = 10.sp, color = tagColor, fontWeight = FontWeight.Bold,
+                            Text(it.uppercase(), fontSize = 10.sp, color = tagColor,
+                                fontWeight = FontWeight.Bold,
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp))
                         }
                     }
@@ -149,6 +153,19 @@ fun EventCard(event: Event) {
     }
 }
 
+/** Formats an ISO-8601 UTC string like "2024-12-31T09:00:00Z" into "Dec 31, 2024  9:00 AM" */
+private fun formatReminderDisplay(iso: String): String {
+    return try {
+        val parse = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US)
+        parse.timeZone = TimeZone.getTimeZone("UTC")
+        val date = parse.parse(iso) ?: return iso
+        val display = SimpleDateFormat("MMM d, yyyy  h:mm a", Locale.US)
+        display.timeZone = TimeZone.getDefault()
+        display.format(date)
+    } catch (_: Exception) { iso }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CreateEventSheet(
     contacts: List<Contact>,
@@ -164,27 +181,40 @@ fun CreateEventSheet(
     var contactExpanded by remember { mutableStateOf(false) }
     var tagExpanded by remember { mutableStateOf(false) }
 
+    // Date-time picker state
+    var editingReminderIdx by remember { mutableStateOf(-1) }
+    var showDatePicker by remember { mutableStateOf(false) }
+    var showTimePicker by remember { mutableStateOf(false) }
+    val datePickerState = rememberDatePickerState(
+        initialSelectedDateMillis = System.currentTimeMillis()
+    )
+    val timePickerState = rememberTimePickerState(
+        initialHour = 9, initialMinute = 0, is24Hour = false
+    )
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Create Event") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                OutlinedTextField(value = title, onValueChange = { title = it },
-                    label = { Text("Title *") }, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(
+                    value = title, onValueChange = { title = it },
+                    label = { Text("Title *") }, modifier = Modifier.fillMaxWidth()
+                )
 
                 // Contact picker
                 ExposedDropdownMenuBox(expanded = contactExpanded, onExpandedChange = { contactExpanded = it }) {
                     OutlinedTextField(
                         value = selectedContact?.name ?: "Select Contact",
-                        onValueChange = {},
-                        readOnly = true,
+                        onValueChange = {}, readOnly = true,
                         label = { Text("Contact") },
                         modifier = Modifier.fillMaxWidth().menuAnchor(),
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = contactExpanded) }
                     )
                     ExposedDropdownMenu(expanded = contactExpanded, onDismissRequest = { contactExpanded = false }) {
                         contacts.forEach { c ->
-                            DropdownMenuItem(text = { Text(c.name) }, onClick = { selectedContact = c; contactExpanded = false })
+                            DropdownMenuItem(text = { Text(c.name) },
+                                onClick = { selectedContact = c; contactExpanded = false })
                         }
                     }
                 }
@@ -193,33 +223,49 @@ fun CreateEventSheet(
                 ExposedDropdownMenuBox(expanded = tagExpanded, onExpandedChange = { tagExpanded = it }) {
                     OutlinedTextField(
                         value = selectedTag?.name ?: "Select Tag",
-                        onValueChange = {},
-                        readOnly = true,
+                        onValueChange = {}, readOnly = true,
                         label = { Text("Tag") },
                         modifier = Modifier.fillMaxWidth().menuAnchor(),
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = tagExpanded) }
                     )
                     ExposedDropdownMenu(expanded = tagExpanded, onDismissRequest = { tagExpanded = false }) {
                         tags.forEach { t ->
-                            DropdownMenuItem(text = { Text(t.name) }, onClick = { selectedTag = t; tagExpanded = false })
+                            DropdownMenuItem(text = { Text(t.name) },
+                                onClick = { selectedTag = t; tagExpanded = false })
                         }
                     }
                 }
 
-                OutlinedTextField(value = notes, onValueChange = { notes = it },
-                    label = { Text("Notes") }, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(
+                    value = notes, onValueChange = { notes = it },
+                    label = { Text("Notes") }, modifier = Modifier.fillMaxWidth()
+                )
 
-                Text("Reminders (format: 2024-12-31T09:00:00Z)", fontSize = 12.sp, color = TextSecondary)
+                // Reminder pickers — tap button to open date → time picker
+                Text("Reminders", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = TextPrimary)
                 reminderTimes.forEachIndexed { i, time ->
-                    Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                        OutlinedTextField(
-                            value = time,
-                            onValueChange = { v -> reminderTimes = reminderTimes.toMutableList().also { it[i] = v } },
-                            label = { Text("Reminder ${i + 1}") },
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        OutlinedButton(
+                            onClick = { editingReminderIdx = i; showDatePicker = true },
                             modifier = Modifier.weight(1f)
-                        )
-                        TextButton(onClick = { reminderTimes = reminderTimes.toMutableList().also { it.removeAt(i) } }) {
-                            Text("✕")
+                        ) {
+                            Text(
+                                text = if (time.isBlank()) "Reminder ${i + 1} — tap to set"
+                                       else formatReminderDisplay(time),
+                                maxLines = 1,
+                                fontSize = 13.sp
+                            )
+                        }
+                        IconButton(
+                            onClick = {
+                                reminderTimes = reminderTimes.toMutableList().also { it.removeAt(i) }
+                            }
+                        ) {
+                            Icon(Icons.Default.Close, contentDescription = "Remove reminder",
+                                tint = TextSecondary)
                         }
                     }
                 }
@@ -243,4 +289,68 @@ fun CreateEventSheet(
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("CANCEL") } }
     )
+
+    // ── Date picker dialog ────────────────────────────────────────────────────
+    if (showDatePicker) {
+        DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            confirmButton = {
+                Button(onClick = {
+                    showDatePicker = false
+                    showTimePicker = true
+                }) { Text("Next: Set Time →") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDatePicker = false }) { Text("Cancel") }
+            }
+        ) {
+            DatePicker(state = datePickerState)
+        }
+    }
+
+    // ── Time picker dialog ────────────────────────────────────────────────────
+    if (showTimePicker) {
+        AlertDialog(
+            onDismissRequest = { showTimePicker = false },
+            title = { Text("Set Time") },
+            text = {
+                Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    TimePicker(state = timePickerState)
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    // Build ISO-8601 UTC string from picked date + time
+                    val selectedMillis = datePickerState.selectedDateMillis
+                        ?: System.currentTimeMillis()
+                    val dateCal = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
+                    dateCal.timeInMillis = selectedMillis
+                    val utcCal = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
+                    utcCal.set(
+                        dateCal.get(Calendar.YEAR),
+                        dateCal.get(Calendar.MONTH),
+                        dateCal.get(Calendar.DAY_OF_MONTH),
+                        timePickerState.hour,
+                        timePickerState.minute,
+                        0
+                    )
+                    utcCal.set(Calendar.MILLISECOND, 0)
+                    val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US)
+                    sdf.timeZone = TimeZone.getTimeZone("UTC")
+                    val iso = sdf.format(utcCal.time)
+                    if (editingReminderIdx >= 0 && editingReminderIdx < reminderTimes.size) {
+                        reminderTimes = reminderTimes.toMutableList()
+                            .also { it[editingReminderIdx] = iso }
+                    }
+                    showTimePicker = false
+                }) { Text("Confirm") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showTimePicker = false
+                    showDatePicker = true   // go back to date picker
+                }) { Text("← Back") }
+            }
+        )
+    }
 }
