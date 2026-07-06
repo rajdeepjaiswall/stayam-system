@@ -149,6 +149,17 @@ data class ApiError(val error: String)
 data class LoginRequest(val email: String, val password: String)
 
 @Serializable
+data class CreateContactRequest(
+    val name: String,
+    val mobile: String? = null,
+    val whatsapp: String? = null,
+    val email: String? = null,
+    val organisation: String? = null,
+    val address: String? = null,
+    val notes: String? = null
+)
+
+@Serializable
 data class RegisterRequest(
     val email: String,
     val password: String,
