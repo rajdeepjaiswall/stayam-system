@@ -1,9 +1,10 @@
 package `in`.getdownfoundation.sahusales.ui.settings
 
 import android.app.AlarmManager
-import android.content.Context
+import android.app.NotificationManager
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.os.PowerManager
 import android.provider.Settings
 import androidx.compose.foundation.layout.*
@@ -37,27 +38,51 @@ fun SettingsScreen(viewModel: MainViewModel, onLogout: () -> Unit) {
     var orgName by remember(currentUser) { mutableStateOf(currentUser?.organisationName ?: "") }
     var vibrate by remember(currentUser) { mutableStateOf(currentUser?.vibrate ?: true) }
 
-    // Permission checks
     val am = context.getSystemService(AlarmManager::class.java)
     val pm = context.getSystemService(PowerManager::class.java)
-    var canExactAlarms by remember { mutableStateOf(am.canScheduleExactAlarms()) }
-    var batteryOptIgnored by remember { mutableStateOf(pm.isIgnoringBatteryOptimizations(context.packageName)) }
+    val nm = context.getSystemService(NotificationManager::class.java)
+
+    fun checkPermissions() = mapOf(
+        "exactAlarms" to am.canScheduleExactAlarms(),
+        "battery" to pm.isIgnoringBatteryOptimizations(context.packageName),
+        "overlay" to Settings.canDrawOverlays(context),
+        "notifications" to if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)
+            context.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) ==
+                android.content.pm.PackageManager.PERMISSION_GRANTED
+        else true,
+        "fullScreen" to if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
+            nm.canUseFullScreenIntent()
+        else true
+    )
+
+    var perms by remember { mutableStateOf(checkPermissions()) }
 
     Scaffold(snackbarHost = { SnackbarHost(snackbarHostState) }) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)) {
-
+        Column(
+            Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
             Text("Settings", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Primary)
 
-            // Profile section
-            Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White)) {
+            // ── Profile ───────────────────────────────────────────────────────
+            Card(
+                Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White)
+            ) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text("Profile", fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                    OutlinedTextField(value = fullName, onValueChange = { fullName = it }, label = { Text("Full Name") }, modifier = Modifier.fillMaxWidth())
-                    OutlinedTextField(value = mobile, onValueChange = { mobile = it }, label = { Text("Mobile") }, modifier = Modifier.fillMaxWidth())
-                    OutlinedTextField(value = orgName, onValueChange = { orgName = it }, label = { Text("Organisation") }, modifier = Modifier.fillMaxWidth())
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedTextField(value = fullName, onValueChange = { fullName = it },
+                        label = { Text("Full Name") }, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(value = mobile, onValueChange = { mobile = it },
+                        label = { Text("Mobile") }, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(value = orgName, onValueChange = { orgName = it },
+                        label = { Text("Organisation") }, modifier = Modifier.fillMaxWidth())
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically) {
                         Text("Vibrate on alarm")
                         Switch(checked = vibrate, onCheckedChange = { vibrate = it })
                     }
@@ -65,7 +90,11 @@ fun SettingsScreen(viewModel: MainViewModel, onLogout: () -> Unit) {
                         scope.launch {
                             try {
                                 val resp = withContext(Dispatchers.IO) {
-                                    viewModel.api()?.updateMe(mapOf("full_name" to fullName, "mobile" to mobile, "organisation_name" to orgName))
+                                    viewModel.api()?.updateMe(mapOf(
+                                        "full_name" to fullName,
+                                        "mobile" to mobile,
+                                        "organisation_name" to orgName
+                                    ))
                                 }
                                 if (resp?.isSuccessful == true) snackbarHostState.showSnackbar("Profile updated")
                                 else snackbarHostState.showSnackbar("Failed to update")
@@ -75,52 +104,124 @@ fun SettingsScreen(viewModel: MainViewModel, onLogout: () -> Unit) {
                 }
             }
 
-            // Permissions checklist
-            Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White)) {
+            // ── Permissions ───────────────────────────────────────────────────
+            Card(
+                Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White)
+            ) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("Alarm Permissions", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Text("Alarm & Notification Permissions", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Text(
+                        "Enable ALL of these so reminders fire as full-screen alerts even when the phone is locked or another app is open.",
+                        fontSize = 12.sp, color = TextSecondary
+                    )
 
+                    // 1. Exact alarms
                     PermissionRow(
                         label = "Exact Alarms",
-                        granted = canExactAlarms,
+                        description = "Required to fire reminders at the exact time you set.",
+                        granted = perms["exactAlarms"] == true,
                         onFix = {
-                            canExactAlarms = am.canScheduleExactAlarms()
-                            if (!canExactAlarms) {
-                                context.startActivity(Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,
-                                    Uri.parse("package:${context.packageName}")))
-                            }
+                            if (am.canScheduleExactAlarms()) { perms = checkPermissions(); return@PermissionRow }
+                            context.startActivity(
+                                Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,
+                                    Uri.parse("package:${context.packageName}"))
+                            )
                         }
                     )
 
+                    // 2. Battery optimization
                     PermissionRow(
-                        label = "Battery Optimization (must be OFF)",
-                        granted = batteryOptIgnored,
+                        label = "Ignore Battery Optimization",
+                        description = "Prevents Android from killing the alarm while the screen is off.",
+                        granted = perms["battery"] == true,
                         onFix = {
-                            batteryOptIgnored = pm.isIgnoringBatteryOptimizations(context.packageName)
-                            if (!batteryOptIgnored) {
-                                context.startActivity(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
-                                    Uri.parse("package:${context.packageName}")))
-                            }
+                            if (pm.isIgnoringBatteryOptimizations(context.packageName)) { perms = checkPermissions(); return@PermissionRow }
+                            context.startActivity(
+                                Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                                    Uri.parse("package:${context.packageName}"))
+                            )
                         }
                     )
 
-                    Text("OEM Autostart (for Xiaomi/Realme/Oppo/Vivo):", fontSize = 13.sp, color = TextSecondary)
-                    OutlinedButton(onClick = {
-                        val intents = listOf(
-                            Intent().apply { component = android.content.ComponentName("com.miui.securitycenter", "com.miui.permcenter.autostart.AutoStartManagementActivity") },
-                            Intent().apply { component = android.content.ComponentName("com.coloros.safecenter", "com.coloros.safecenter.permission.startup.FnStartupAppListActivity") },
-                            Intent().apply { component = android.content.ComponentName("com.vivo.permissionmanager", "com.vivo.permissionmanager.activity.BgStartUpManagerActivity") },
-                            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}"))
-                        )
-                        for (i in intents) {
-                            try { context.startActivity(i); break } catch (_: Exception) {}
+                    // 3. Overlay (display over other apps)
+                    PermissionRow(
+                        label = "Display Over Other Apps (Overlay)",
+                        description = "Allows the reminder to pop up over whatever app is open on screen.",
+                        granted = perms["overlay"] == true,
+                        onFix = {
+                            context.startActivity(
+                                Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                    Uri.parse("package:${context.packageName}"))
+                            )
                         }
-                    }, modifier = Modifier.fillMaxWidth()) { Text("Open Autostart Settings") }
+                    )
+
+                    // 4. Notifications (Android 13+)
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        PermissionRow(
+                            label = "Post Notifications",
+                            description = "Required on Android 13+ to show any notification.",
+                            granted = perms["notifications"] == true,
+                            onFix = {
+                                context.startActivity(
+                                    Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                                        .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                                )
+                            }
+                        )
+                    }
+
+                    // 5. Full-screen intent (Android 14+)
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                        PermissionRow(
+                            label = "Full-Screen Notifications",
+                            description = "Required on Android 14+ to show a full-screen alarm even on the lock screen.",
+                            granted = perms["fullScreen"] == true,
+                            onFix = {
+                                try {
+                                    context.startActivity(
+                                        Intent("android.settings.MANAGE_APP_USE_FULL_SCREEN_INTENT",
+                                            Uri.parse("package:${context.packageName}"))
+                                    )
+                                } catch (_: Exception) {
+                                    context.startActivity(
+                                        Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                                            Uri.parse("package:${context.packageName}"))
+                                    )
+                                }
+                            }
+                        )
+                    }
+
+                    // OEM autostart
+                    Text("OEM Autostart — tap if you use Xiaomi / Realme / Oppo / Vivo:",
+                        fontSize = 13.sp, color = TextSecondary)
+                    OutlinedButton(
+                        onClick = {
+                            val intents = listOf(
+                                Intent().apply { component = android.content.ComponentName("com.miui.securitycenter", "com.miui.permcenter.autostart.AutoStartManagementActivity") },
+                                Intent().apply { component = android.content.ComponentName("com.coloros.safecenter", "com.coloros.safecenter.permission.startup.FnStartupAppListActivity") },
+                                Intent().apply { component = android.content.ComponentName("com.vivo.permissionmanager", "com.vivo.permissionmanager.activity.BgStartUpManagerActivity") },
+                                Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}"))
+                            )
+                            for (i in intents) {
+                                try { context.startActivity(i); break } catch (_: Exception) {}
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("Open Autostart Settings") }
+
+                    // Refresh status after returning from system settings
+                    Button(
+                        onClick = { perms = checkPermissions() },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = Primary)
+                    ) { Text("↻  Refresh Permission Status") }
                 }
             }
 
-            // Logout
+            // ── Logout ────────────────────────────────────────────────────────
             OutlinedButton(
                 onClick = { viewModel.logout { onLogout() } },
                 modifier = Modifier.fillMaxWidth(),
@@ -131,13 +232,28 @@ fun SettingsScreen(viewModel: MainViewModel, onLogout: () -> Unit) {
 }
 
 @Composable
-fun PermissionRow(label: String, granted: Boolean, onFix: () -> Unit) {
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+fun PermissionRow(
+    label: String,
+    description: String = "",
+    granted: Boolean,
+    onFix: () -> Unit
+) {
+    Row(
+        Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
         Column(Modifier.weight(1f)) {
-            Text(label, fontSize = 14.sp)
-            Text(if (granted) "✅ Granted" else "❌ Not granted", fontSize = 12.sp,
-                color = if (granted) StatusUpcoming else StatusOverdue)
+            Text(label, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+            if (description.isNotBlank())
+                Text(description, fontSize = 11.sp, color = TextSecondary)
+            Text(
+                if (granted) "✅ Granted" else "❌ Not granted",
+                fontSize = 12.sp,
+                color = if (granted) StatusUpcoming else StatusOverdue
+            )
         }
+        Spacer(Modifier.width(8.dp))
         if (!granted) {
             OutlinedButton(onClick = onFix) { Text("FIX", fontSize = 12.sp) }
         }
