@@ -20,6 +20,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import `in`.getdownfoundation.sahusales.core.Contact
+import `in`.getdownfoundation.sahusales.core.CreateContactRequest
 import `in`.getdownfoundation.sahusales.ui.MainViewModel
 import `in`.getdownfoundation.sahusales.ui.theme.*
 import kotlinx.coroutines.Dispatchers
@@ -76,7 +77,16 @@ fun ContactsScreen(viewModel: MainViewModel, onContactClick: (String) -> Unit) {
             onSave = { data ->
                 scope.launch {
                     try {
-                        val resp = withContext(Dispatchers.IO) { viewModel.api()?.createContact(data) }
+                        val req = CreateContactRequest(
+                            name = data["name"] ?: "",
+                            mobile = data["mobile"],
+                            whatsapp = data["whatsapp"],
+                            email = data["email"],
+                            organisation = data["organisation"],
+                            address = data["address"],
+                            notes = data["notes"]
+                        )
+                        val resp = withContext(Dispatchers.IO) { viewModel.api()?.createContact(req) }
                         if (resp?.isSuccessful == true) {
                             viewModel.loadContacts()
                             showAdd = false
