@@ -20,13 +20,13 @@ interface ApiService {
     suspend fun getContacts(@Query("search") search: String = ""): Response<List<Contact>>
 
     @POST("api/contacts")
-    suspend fun createContact(@Body body: Map<String, String?>): Response<Contact>
+    suspend fun createContact(@Body body: CreateContactRequest): Response<Contact>
 
     @GET("api/contacts/{id}")
     suspend fun getContact(@Path("id") id: String): Response<Contact>
 
     @PATCH("api/contacts/{id}")
-    suspend fun updateContact(@Path("id") id: String, @Body body: Map<String, String?>): Response<Contact>
+    suspend fun updateContact(@Path("id") id: String, @Body body: Map<String, @JvmSuppressWildcards Any?>): Response<Contact>
 
     @DELETE("api/contacts/{id}")
     suspend fun deleteContact(@Path("id") id: String): Response<Map<String, Boolean>>
