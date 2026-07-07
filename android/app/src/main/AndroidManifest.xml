@@ -67,6 +67,10 @@
         </provider>
 
         <service
+            android:name=".overlay.OverlayBubbleService"
+            android:exported="false"/>
+
+        <service
             android:name="androidx.work.impl.foreground.SystemForegroundService"
             android:foregroundServiceType="specialUse"
             tools:node="merge"
