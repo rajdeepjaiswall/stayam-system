@@ -322,24 +322,27 @@ fun CreateEventSheet(
             },
             confirmButton = {
                 Button(onClick = {
-                    // Build ISO-8601 UTC string from picked date + time
+                    // Build ISO-8601 UTC string from picked date + time.
+                    // DatePicker gives midnight UTC for the selected date — extract Y/M/D from that.
+                    // Then set date+time on a LOCAL timezone calendar so IST (or any offset) is
+                    // applied correctly before converting to UTC for storage.
                     val selectedMillis = datePickerState.selectedDateMillis
                         ?: System.currentTimeMillis()
-                    val dateCal = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
-                    dateCal.timeInMillis = selectedMillis
-                    val utcCal = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
-                    utcCal.set(
-                        dateCal.get(Calendar.YEAR),
-                        dateCal.get(Calendar.MONTH),
-                        dateCal.get(Calendar.DAY_OF_MONTH),
+                    val utcForDate = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
+                    utcForDate.timeInMillis = selectedMillis
+                    val localCal = Calendar.getInstance() // device timezone (e.g. IST = UTC+5:30)
+                    localCal.set(
+                        utcForDate.get(Calendar.YEAR),
+                        utcForDate.get(Calendar.MONTH),
+                        utcForDate.get(Calendar.DAY_OF_MONTH),
                         timePickerState.hour,
                         timePickerState.minute,
                         0
                     )
-                    utcCal.set(Calendar.MILLISECOND, 0)
+                    localCal.set(Calendar.MILLISECOND, 0)
                     val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US)
                     sdf.timeZone = TimeZone.getTimeZone("UTC")
-                    val iso = sdf.format(utcCal.time)
+                    val iso = sdf.format(localCal.time)
                     if (editingReminderIdx >= 0 && editingReminderIdx < reminderTimes.size) {
                         reminderTimes = reminderTimes.toMutableList()
                             .also { it[editingReminderIdx] = iso }
