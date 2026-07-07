@@ -17,6 +17,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import `in`.getdownfoundation.sahusales.core.Contact
+import `in`.getdownfoundation.sahusales.core.CreateEventRequest
+import `in`.getdownfoundation.sahusales.core.CreateReminderInput
 import `in`.getdownfoundation.sahusales.core.Event
 import `in`.getdownfoundation.sahusales.core.EventTag
 import `in`.getdownfoundation.sahusales.ui.MainViewModel
@@ -171,7 +173,7 @@ fun CreateEventSheet(
     contacts: List<Contact>,
     tags: List<EventTag>,
     onDismiss: () -> Unit,
-    onSave: (Map<String, Any?>) -> Unit
+    onSave: (CreateEventRequest) -> Unit
 ) {
     var title by remember { mutableStateOf("") }
     var notes by remember { mutableStateOf("") }
@@ -277,13 +279,13 @@ fun CreateEventSheet(
         confirmButton = {
             Button(onClick = {
                 if (title.isBlank()) return@Button
-                val reminders = reminderTimes.filter { it.isNotBlank() }.map { mapOf("remind_at" to it) }
-                onSave(mapOf(
-                    "title" to title.trim(),
-                    "notes" to notes.ifBlank { null },
-                    "contact_id" to selectedContact?.id,
-                    "tag_id" to selectedTag?.id,
-                    "reminders" to reminders
+                val reminders = reminderTimes.filter { it.isNotBlank() }.map { CreateReminderInput(it) }
+                onSave(CreateEventRequest(
+                    title = title.trim(),
+                    notes = notes.ifBlank { null },
+                    contactId = selectedContact?.id,
+                    tagId = selectedTag?.id,
+                    reminders = reminders
                 ))
             }) { Text("CREATE") }
         },
