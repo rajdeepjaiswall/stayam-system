@@ -149,6 +149,20 @@ data class ApiError(val error: String)
 data class LoginRequest(val email: String, val password: String)
 
 @Serializable
+data class CreateReminderInput(
+    @SerialName("remind_at") val remindAt: String
+)
+
+@Serializable
+data class CreateEventRequest(
+    val title: String,
+    val notes: String? = null,
+    @SerialName("contact_id") val contactId: String? = null,
+    @SerialName("tag_id") val tagId: String? = null,
+    val reminders: List<CreateReminderInput> = emptyList()
+)
+
+@Serializable
 data class CreateContactRequest(
     val name: String,
     val mobile: String? = null,
