@@ -39,7 +39,7 @@ interface ApiService {
     ): Response<List<Event>>
 
     @POST("api/events")
-    suspend fun createEvent(@Body body: Map<String, @JvmSuppressWildcards Any?>): Response<Event>
+    suspend fun createEvent(@Body body: CreateEventRequest): Response<Event>
 
     @PATCH("api/events/{id}")
     suspend fun updateEvent(@Path("id") id: String, @Body body: Map<String, String?>): Response<Event>
