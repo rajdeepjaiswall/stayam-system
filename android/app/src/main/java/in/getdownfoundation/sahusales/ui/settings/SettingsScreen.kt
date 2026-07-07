@@ -20,6 +20,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import `in`.getdownfoundation.sahusales.alarm.AlarmScheduler
+import `in`.getdownfoundation.sahusales.overlay.OverlayBubbleService
 import `in`.getdownfoundation.sahusales.ui.MainViewModel
 import `in`.getdownfoundation.sahusales.ui.theme.*
 import kotlinx.coroutines.Dispatchers
@@ -56,6 +58,7 @@ fun SettingsScreen(viewModel: MainViewModel, onLogout: () -> Unit) {
     )
 
     var perms by remember { mutableStateOf(checkPermissions()) }
+    var bubbleActive by remember { mutableStateOf(false) }
 
     Scaffold(snackbarHost = { SnackbarHost(snackbarHostState) }) { padding ->
         Column(
@@ -218,6 +221,83 @@ fun SettingsScreen(viewModel: MainViewModel, onLogout: () -> Unit) {
                         modifier = Modifier.fillMaxWidth(),
                         colors = ButtonDefaults.buttonColors(containerColor = Primary)
                     ) { Text("↻  Refresh Permission Status") }
+                }
+            }
+
+            // ── Floating Bubble ───────────────────────────────────────────────
+            Card(
+                Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White)
+            ) {
+                Row(
+                    Modifier.padding(16.dp).fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Floating Bubble", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        Text(
+                            "Shows a draggable bubble on screen while you use other apps. Tap the bubble to return to the app. Tap × to close it.",
+                            fontSize = 12.sp, color = TextSecondary
+                        )
+                        if (!Settings.canDrawOverlays(context)) {
+                            Text("⚠ Overlay permission required — grant it in Permissions above.",
+                                fontSize = 11.sp, color = StatusOverdue)
+                        }
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Switch(
+                        checked = bubbleActive,
+                        onCheckedChange = { on ->
+                            if (!Settings.canDrawOverlays(context)) {
+                                context.startActivity(
+                                    Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                        Uri.parse("package:${context.packageName}"))
+                                )
+                            } else {
+                                val svc = Intent(context, OverlayBubbleService::class.java)
+                                if (on) context.startService(svc) else context.stopService(svc)
+                                bubbleActive = on
+                            }
+                        }
+                    )
+                }
+            }
+
+            // ── Test Reminder ─────────────────────────────────────────────────
+            Card(
+                Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White)
+            ) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Test Reminder", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Text(
+                        "Fires a mock full-screen alarm in 5 seconds so you can verify the reminder system is working. After tapping, minimize the app and wait.",
+                        fontSize = 12.sp, color = TextSecondary
+                    )
+                    Button(
+                        onClick = {
+                            if (!am.canScheduleExactAlarms()) {
+                                scope.launch {
+                                    snackbarHostState.showSnackbar("Grant 'Exact Alarms' permission first!")
+                                }
+                                return@Button
+                            }
+                            val mockId = "mock_${System.currentTimeMillis()}"
+                            AlarmScheduler.schedule(
+                                context, mockId,
+                                System.currentTimeMillis() + 5_000L,
+                                "Test Reminder"
+                            )
+                            scope.launch {
+                                snackbarHostState.showSnackbar("⏱ Alarm fires in 5 sec — minimize the app now!")
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32))
+                    ) {
+                        Text("▶  Fire Test Alarm in 5 Seconds", color = Color.White, fontWeight = FontWeight.Bold)
+                    }
                 }
             }
 
