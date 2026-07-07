@@ -110,6 +110,26 @@ object ReminderSyncer {
     }
 
     suspend fun getCachedReminder(context: Context, reminderId: String): ReminderFeedItem? {
+        // Return a synthetic reminder for test alarms (no network/cache needed)
+        if (reminderId.startsWith("mock_")) {
+            return ReminderFeedItem(
+                id = reminderId,
+                eventId = "mock_event",
+                remindAt = "",
+                effectiveTime = "",
+                status = "pending",
+                eventTitle = "Test Reminder",
+                eventNotes = "This is a mock alarm to verify the reminder system is working.",
+                contactName = "Test Contact",
+                contactOrganisation = "Test Organisation",
+                contactMobile = null,
+                contactWhatsapp = null,
+                tagName = "TEST",
+                tagColor = "#1565C0",
+                eventStatus = null,
+                snoozedUntil = null
+            )
+        }
         val store = SessionStore(context)
         return store.getCachedReminders().find { it.id == reminderId }
     }
