@@ -7,14 +7,21 @@ import android.net.Uri
 import android.os.Build
 import android.os.PowerManager
 import android.provider.Settings
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -31,6 +38,7 @@ import kotlinx.coroutines.withContext
 @Composable
 fun SettingsScreen(viewModel: MainViewModel, onLogout: () -> Unit) {
     val currentUser by viewModel.currentUser.collectAsState()
+    val eventTags by viewModel.eventTags.collectAsState()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -297,6 +305,127 @@ fun SettingsScreen(viewModel: MainViewModel, onLogout: () -> Unit) {
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32))
                     ) {
                         Text("▶  Fire Test Alarm in 5 Seconds", color = Color.White, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+
+            // ── Event Tags (admin only) ───────────────────────────────────────
+            if (currentUser?.role == "admin") {
+                var showAddTag by remember { mutableStateOf(false) }
+                var newTagName by remember { mutableStateOf("") }
+                var selectedColor by remember { mutableStateOf("#1565C0") }
+
+                val tagColorOptions = listOf(
+                    "#1565C0" to "Blue",
+                    "#2E7D32" to "Green",
+                    "#C62828" to "Red",
+                    "#E65100" to "Orange",
+                    "#6A1B9A" to "Purple",
+                    "#00838F" to "Teal",
+                    "#4E342E" to "Brown",
+                    "#37474F" to "Grey"
+                )
+
+                Card(
+                    Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.White)
+                ) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("Event Tags", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                            IconButton(onClick = { showAddTag = !showAddTag }) {
+                                Icon(if (showAddTag) Icons.Default.Close else Icons.Default.Add, null, tint = Primary)
+                            }
+                        }
+
+                        if (showAddTag) {
+                            OutlinedTextField(
+                                value = newTagName,
+                                onValueChange = { newTagName = it },
+                                label = { Text("Tag Name (e.g. AMC, Call, Demo)") },
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true
+                            )
+                            Text("Colour", fontSize = 13.sp, color = TextSecondary, fontWeight = FontWeight.Medium)
+                            Row(
+                                Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                tagColorOptions.forEach { (hex, _) ->
+                                    val c = try { Color(android.graphics.Color.parseColor(hex)) } catch (e: Exception) { Primary }
+                                    val isSelected = selectedColor == hex
+                                    Box(
+                                        Modifier
+                                            .size(if (isSelected) 36.dp else 28.dp)
+                                            .clip(CircleShape)
+                                            .background(c)
+                                            .then(Modifier.clickable { selectedColor = hex }),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        if (isSelected) {
+                                            Text("✓", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+                                }
+                            }
+                            Button(
+                                onClick = {
+                                    if (newTagName.isNotBlank()) {
+                                        scope.launch {
+                                            try {
+                                                viewModel.api()?.createEventTag(
+                                                    mapOf("name" to newTagName.trim(), "color" to selectedColor)
+                                                )
+                                                viewModel.loadEventTags()
+                                                newTagName = ""
+                                                showAddTag = false
+                                            } catch (e: Exception) {
+                                                snackbarHostState.showSnackbar(e.message ?: "Error")
+                                            }
+                                        }
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) { Text("ADD TAG") }
+                        }
+
+                        if (eventTags.isEmpty()) {
+                            Text("No tags yet. Add tags like AMC, Call, Demo, Follow-up…",
+                                fontSize = 13.sp, color = TextSecondary)
+                        } else {
+                            eventTags.forEach { tag ->
+                                val tagColor = try {
+                                    Color(android.graphics.Color.parseColor(tag.color))
+                                } catch (e: Exception) { Primary }
+                                Row(
+                                    Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Box(Modifier.size(14.dp).clip(CircleShape).background(tagColor))
+                                        Spacer(Modifier.width(10.dp))
+                                        Text(tag.name, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                                    }
+                                    IconButton(onClick = {
+                                        scope.launch {
+                                            try {
+                                                viewModel.api()?.deleteEventTag(tag.id)
+                                                viewModel.loadEventTags()
+                                            } catch (e: Exception) {
+                                                snackbarHostState.showSnackbar(e.message ?: "Error")
+                                            }
+                                        }
+                                    }) {
+                                        Icon(Icons.Default.Close, null, tint = StatusOverdue, modifier = Modifier.size(18.dp))
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
