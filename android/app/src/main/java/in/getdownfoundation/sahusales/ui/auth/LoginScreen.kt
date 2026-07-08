@@ -71,9 +71,6 @@ fun LoginScreen(
             else Text("LOGIN", fontWeight = FontWeight.Bold)
         }
 
-        Spacer(Modifier.height(16.dp))
-        TextButton(onClick = onGoRegister) {
-            Text("Don't have an account? Register")
-        }
+        // Registration is admin-only via Team section — no self-register button
     }
 }
