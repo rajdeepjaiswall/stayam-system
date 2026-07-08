@@ -21,6 +21,7 @@ import `in`.getdownfoundation.sahusales.core.CreateEventRequest
 import `in`.getdownfoundation.sahusales.core.CreateReminderInput
 import `in`.getdownfoundation.sahusales.core.Event
 import `in`.getdownfoundation.sahusales.core.EventTag
+import `in`.getdownfoundation.sahusales.core.User
 import `in`.getdownfoundation.sahusales.ui.MainViewModel
 import `in`.getdownfoundation.sahusales.ui.dashboard.formatTime
 import `in`.getdownfoundation.sahusales.ui.theme.*
@@ -35,6 +36,8 @@ fun EventsScreen(viewModel: MainViewModel) {
     val events by viewModel.events.collectAsState()
     val contacts by viewModel.contacts.collectAsState()
     val tags by viewModel.eventTags.collectAsState()
+    val team by viewModel.team.collectAsState()
+    val currentUser by viewModel.currentUser.collectAsState()
     val scope = rememberCoroutineScope()
     var selectedStatus by remember { mutableStateOf<String?>(null) }
     var showCreate by remember { mutableStateOf(false) }
@@ -88,6 +91,8 @@ fun EventsScreen(viewModel: MainViewModel) {
         CreateEventSheet(
             contacts = contacts,
             tags = tags,
+            team = team,
+            currentUser = currentUser,
             onDismiss = { showCreate = false },
             onSave = { body ->
                 scope.launch {
@@ -144,6 +149,9 @@ fun EventCard(event: Event) {
                 Text(event.title, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                 event.contactName?.let { Text(it, fontSize = 14.sp, color = TextPrimary) }
                 event.contactOrganisation?.let { Text(it, fontSize = 13.sp, color = TextSecondary) }
+                event.assigneeName?.let {
+                    Text("👤 $it", fontSize = 12.sp, color = Primary.copy(alpha = 0.8f))
+                }
                 if (event.reminders.isNotEmpty()) {
                     Spacer(Modifier.height(4.dp))
                     event.reminders.take(2).forEach { r ->
@@ -172,6 +180,8 @@ private fun formatReminderDisplay(iso: String): String {
 fun CreateEventSheet(
     contacts: List<Contact>,
     tags: List<EventTag>,
+    team: List<User> = emptyList(),
+    currentUser: User? = null,
     onDismiss: () -> Unit,
     onSave: (CreateEventRequest) -> Unit
 ) {
@@ -179,9 +189,11 @@ fun CreateEventSheet(
     var notes by remember { mutableStateOf("") }
     var selectedContact by remember { mutableStateOf<Contact?>(null) }
     var selectedTag by remember { mutableStateOf<EventTag?>(null) }
+    var selectedAssignee by remember { mutableStateOf<User?>(null) }
     var reminderTimes by remember { mutableStateOf(listOf("")) }
     var contactExpanded by remember { mutableStateOf(false) }
     var tagExpanded by remember { mutableStateOf(false) }
+    var assigneeExpanded by remember { mutableStateOf(false) }
 
     // Date-time picker state
     var editingReminderIdx by remember { mutableStateOf(-1) }
@@ -238,6 +250,33 @@ fun CreateEventSheet(
                     }
                 }
 
+                // Assign To picker
+                if (team.isNotEmpty() || currentUser != null) {
+                    ExposedDropdownMenuBox(expanded = assigneeExpanded, onExpandedChange = { assigneeExpanded = it }) {
+                        OutlinedTextField(
+                            value = selectedAssignee?.fullName ?: "Assign To (optional)",
+                            onValueChange = {}, readOnly = true,
+                            label = { Text("Assign To") },
+                            modifier = Modifier.fillMaxWidth().menuAnchor(),
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = assigneeExpanded) }
+                        )
+                        ExposedDropdownMenu(expanded = assigneeExpanded, onDismissRequest = { assigneeExpanded = false }) {
+                            currentUser?.let { me ->
+                                DropdownMenuItem(
+                                    text = { Text("${me.fullName} (me)") },
+                                    onClick = { selectedAssignee = me; assigneeExpanded = false }
+                                )
+                            }
+                            team.filter { it.id != currentUser?.id }.forEach { member ->
+                                DropdownMenuItem(
+                                    text = { Text(member.fullName) },
+                                    onClick = { selectedAssignee = member; assigneeExpanded = false }
+                                )
+                            }
+                        }
+                    }
+                }
+
                 OutlinedTextField(
                     value = notes, onValueChange = { notes = it },
                     label = { Text("Notes") }, modifier = Modifier.fillMaxWidth()
@@ -285,6 +324,7 @@ fun CreateEventSheet(
                     notes = notes.ifBlank { null },
                     contactId = selectedContact?.id,
                     tagId = selectedTag?.id,
+                    assignedTo = selectedAssignee?.id,
                     reminders = reminders
                 ))
             }) { Text("CREATE") }
