@@ -14,6 +14,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import `in`.getdownfoundation.sahusales.core.Invoice
+import `in`.getdownfoundation.sahusales.core.CreateInvoiceRequest
+import `in`.getdownfoundation.sahusales.core.CreateInvoiceItemRequest
 import `in`.getdownfoundation.sahusales.ui.MainViewModel
 import `in`.getdownfoundation.sahusales.ui.theme.*
 import kotlinx.coroutines.Dispatchers
@@ -67,7 +69,7 @@ fun InvoicesScreen(viewModel: MainViewModel) {
         CreateInvoiceDialog(
             contacts = contacts,
             onDismiss = { showCreate = false },
-            onSave = { body ->
+            onSave = { body: CreateInvoiceRequest ->
                 scope.launch {
                     try {
                         val resp = withContext(Dispatchers.IO) { viewModel.api()?.createInvoice(body) }
@@ -116,7 +118,7 @@ fun InvoiceCard(inv: Invoice) {
 fun CreateInvoiceDialog(
     contacts: List<`in`.getdownfoundation.sahusales.core.Contact>,
     onDismiss: () -> Unit,
-    onSave: (Map<String, Any?>) -> Unit
+    onSave: (CreateInvoiceRequest) -> Unit
 ) {
     var selectedContact by remember { mutableStateOf<`in`.getdownfoundation.sahusales.core.Contact?>(null) }
     var contactExpanded by remember { mutableStateOf(false) }
@@ -176,9 +178,16 @@ fun CreateInvoiceDialog(
         },
         confirmButton = {
             Button(onClick = {
-                val lineItems = items.map { mapOf("name" to it.name, "qty" to (it.qty.toDoubleOrNull() ?: 1.0),
-                    "rate" to (it.rate.toDoubleOrNull() ?: 0.0), "gst_percent" to (it.gst.toDoubleOrNull() ?: 0.0)) }
-                onSave(mapOf("contact_id" to selectedContact?.id, "items" to lineItems))
+                val invoiceItems = items.filter { it.name.isNotBlank() }.map {
+                    CreateInvoiceItemRequest(
+                        name = it.name,
+                        qty = it.qty.toDoubleOrNull() ?: 1.0,
+                        rate = it.rate.toDoubleOrNull() ?: 0.0,
+                        gstPercent = it.gst.toDoubleOrNull() ?: 0.0
+                    )
+                }
+                if (invoiceItems.isEmpty()) return@Button
+                onSave(CreateInvoiceRequest(contactId = selectedContact?.id, items = invoiceItems))
             }) { Text("CREATE") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("CANCEL") } }
