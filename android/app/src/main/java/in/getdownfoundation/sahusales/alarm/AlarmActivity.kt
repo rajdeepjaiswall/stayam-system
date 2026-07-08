@@ -14,7 +14,9 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -23,6 +25,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.lifecycleScope
@@ -187,19 +190,18 @@ fun AlarmScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(
-                Brush.verticalGradient(listOf(tagColor, darkColor))
-            )
+            .background(Brush.verticalGradient(listOf(tagColor, darkColor)))
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(24.dp),
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Spacer(Modifier.height(48.dp))
+            Spacer(Modifier.height(56.dp))
 
-            // Tag badge
+            // ── Tag badge ─────────────────────────────────────────────────────
             reminder?.tagName?.let { tag ->
                 Surface(
                     shape = RoundedCornerShape(50),
@@ -213,126 +215,202 @@ fun AlarmScreen(
                         fontWeight = FontWeight.Bold
                     )
                 }
-                Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(12.dp))
             }
 
-            // Contact name
-            Text(
-                text = reminder?.contactName ?: "Reminder",
-                fontSize = 36.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color.White,
-                textAlign = TextAlign.Center
-            )
-
-            // Organisation
-            reminder?.contactOrganisation?.let {
-                Text(it, fontSize = 18.sp, color = Color.White.copy(alpha = 0.85f))
+            // ── Contact info card ─────────────────────────────────────────────
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = Color.White.copy(alpha = 0.15f),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    Modifier.padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = reminder?.contactName ?: "Reminder",
+                        fontSize = 28.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                        textAlign = TextAlign.Center,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    reminder?.contactOrganisation?.let {
+                        Text(
+                            it,
+                            fontSize = 15.sp,
+                            color = Color.White.copy(alpha = 0.85f),
+                            textAlign = TextAlign.Center,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
             }
 
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(12.dp))
 
-            // Event title
-            Text(
-                text = reminder?.eventTitle ?: "",
-                fontSize = 20.sp,
-                color = Color.White,
-                textAlign = TextAlign.Center
-            )
+            // ── Event info card ───────────────────────────────────────────────
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = Color.White.copy(alpha = 0.12f),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    Modifier.padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = reminder?.eventTitle ?: "",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color.White,
+                        textAlign = TextAlign.Center,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    reminder?.eventNotes?.let {
+                        Text(
+                            it,
+                            fontSize = 13.sp,
+                            color = Color.White.copy(alpha = 0.8f),
+                            textAlign = TextAlign.Center,
+                            maxLines = 3,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    Text(
+                        timeStr,
+                        fontSize = 14.sp,
+                        color = Color.White.copy(alpha = 0.7f)
+                    )
+                }
+            }
 
-            Text(timeStr, fontSize = 16.sp, color = Color.White.copy(alpha = 0.7f))
+            Spacer(Modifier.height(20.dp))
 
-            Spacer(Modifier.weight(1f))
+            // ── Quick-action buttons (Call / WA / Open App) ───────────────────
+            val phone = reminder?.contactMobile
+            val whatsapp = reminder?.contactWhatsapp ?: phone
+            if (phone != null || whatsapp != null) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (phone != null) {
+                        OutlinedButton(
+                            onClick = { onCall(phone) },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Color.White)
+                        ) { Text("📞 Call", color = Color.White, fontSize = 13.sp) }
+                    }
+                    if (whatsapp != null) {
+                        OutlinedButton(
+                            onClick = { onWhatsApp(whatsapp) },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Color.White)
+                        ) { Text("💬 WhatsApp", color = Color.White, fontSize = 13.sp) }
+                    }
+                    OutlinedButton(
+                        onClick = onOpenApp,
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color.White)
+                    ) { Text("App", color = Color.White, fontSize = 13.sp) }
+                }
+                Spacer(Modifier.height(12.dp))
+            }
 
-            // END button
+            // ── Snooze section ────────────────────────────────────────────────
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = Color.White.copy(alpha = 0.13f),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        "SNOOZE",
+                        color = Color.White.copy(alpha = 0.9f),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    // Row 1: 5 min, 15 min, 30 min
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf("5 min" to 5L, "15 min" to 15L, "30 min" to 30L).forEach { (label, mins) ->
+                            OutlinedButton(
+                                onClick = { onSnooze(mins * 60 * 1000) },
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, Color.White),
+                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 10.dp)
+                            ) { Text(label, color = Color.White, fontSize = 12.sp) }
+                        }
+                    }
+                    // Row 2: 1 hour, 3 hours, Custom
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf("1 hour" to 60L, "3 hours" to 180L).forEach { (label, mins) ->
+                            OutlinedButton(
+                                onClick = { onSnooze(mins * 60 * 1000) },
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, Color.White),
+                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 10.dp)
+                            ) { Text(label, color = Color.White, fontSize = 12.sp) }
+                        }
+                        OutlinedButton(
+                            onClick = { showCustomSnooze = !showCustomSnooze },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Color.White),
+                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 10.dp)
+                        ) { Text("Custom", color = Color.White, fontSize = 12.sp) }
+                    }
+
+                    if (showCustomSnooze) {
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            OutlinedTextField(
+                                value = customMinutes,
+                                onValueChange = { customMinutes = it.filter { c -> c.isDigit() } },
+                                label = { Text("Minutes", color = Color.White) },
+                                modifier = Modifier.weight(1f),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = Color.White,
+                                    unfocusedBorderColor = Color.White.copy(alpha = 0.5f),
+                                    focusedTextColor = Color.White,
+                                    unfocusedTextColor = Color.White,
+                                    focusedLabelColor = Color.White,
+                                    unfocusedLabelColor = Color.White.copy(alpha = 0.7f)
+                                )
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Button(
+                                onClick = {
+                                    val mins = customMinutes.toLongOrNull() ?: 5L
+                                    onSnooze(mins * 60 * 1000)
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = Color.White)
+                            ) { Text("GO", color = tagColor, fontWeight = FontWeight.Bold) }
+                        }
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(12.dp))
+
+            // ── END REMINDER button ───────────────────────────────────────────
             Button(
                 onClick = onEnd,
-                modifier = Modifier.fillMaxWidth().height(56.dp),
+                modifier = Modifier.fillMaxWidth().height(58.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF4444)),
-                shape = RoundedCornerShape(12.dp)
+                shape = RoundedCornerShape(14.dp)
             ) {
-                Text("END REMINDER", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                Text("END REMINDER", fontSize = 17.sp, fontWeight = FontWeight.Bold, color = Color.White)
             }
 
-            Spacer(Modifier.height(12.dp))
-
-            // Snooze buttons
-            Text("SNOOZE", color = Color.White.copy(alpha = 0.8f), fontSize = 12.sp, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(8.dp))
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf("5m" to 5L, "30m" to 30L, "50m" to 50L, "3h" to 180L).forEach { (label, mins) ->
-                    OutlinedButton(
-                        onClick = { onSnooze(mins * 60 * 1000) },
-                        modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, Color.White)
-                    ) { Text(label, color = Color.White) }
-                }
-                OutlinedButton(
-                    onClick = { showCustomSnooze = true },
-                    modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Color.White)
-                ) { Text("...", color = Color.White) }
-            }
-
-            if (showCustomSnooze) {
-                Spacer(Modifier.height(8.dp))
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedTextField(
-                        value = customMinutes,
-                        onValueChange = { customMinutes = it.filter { c -> c.isDigit() } },
-                        label = { Text("Minutes", color = Color.White) },
-                        modifier = Modifier.weight(1f),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = Color.White,
-                            unfocusedBorderColor = Color.White.copy(alpha = 0.5f),
-                            focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White
-                        )
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Button(
-                        onClick = {
-                            val mins = customMinutes.toLongOrNull() ?: 5L
-                            onSnooze(mins * 60 * 1000)
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = Color.White)
-                    ) { Text("GO", color = tagColor) }
-                }
-            }
-
-            Spacer(Modifier.height(12.dp))
-
-            // Action buttons
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                val phone = reminder?.contactMobile
-                val whatsapp = reminder?.contactWhatsapp ?: phone
-                if (phone != null) {
-                    OutlinedButton(
-                        onClick = { onCall(phone) },
-                        modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, Color.White)
-                    ) { Text("📞 CALL", color = Color.White) }
-                }
-                if (whatsapp != null) {
-                    OutlinedButton(
-                        onClick = { onWhatsApp(whatsapp) },
-                        modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, Color.White)
-                    ) { Text("💬 WA", color = Color.White) }
-                }
-                OutlinedButton(
-                    onClick = onOpenApp,
-                    modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Color.White)
-                ) { Text("OPEN APP", color = Color.White) }
-            }
-
-            Spacer(Modifier.height(32.dp))
+            Spacer(Modifier.height(40.dp))
         }
     }
 }
