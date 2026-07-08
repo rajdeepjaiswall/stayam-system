@@ -143,7 +143,7 @@ class MainViewModel(private val context: Context) : ViewModel() {
         loadEventTags()
         loadProducts()
         loadInvoices()
-        if (_currentUser.value?.role == "admin") loadTeam()
+        loadTeam() // all users load team — needed for event assignment + admin detail view
     }
 
     fun loadContacts(search: String = "") {
