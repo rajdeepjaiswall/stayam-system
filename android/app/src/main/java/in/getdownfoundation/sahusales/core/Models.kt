@@ -159,7 +159,22 @@ data class CreateEventRequest(
     val notes: String? = null,
     @SerialName("contact_id") val contactId: String? = null,
     @SerialName("tag_id") val tagId: String? = null,
+    @SerialName("assigned_to") val assignedTo: String? = null,
     val reminders: List<CreateReminderInput> = emptyList()
+)
+
+@Serializable
+data class CreateInvoiceItemRequest(
+    val name: String,
+    val qty: Double,
+    val rate: Double,
+    @SerialName("gst_percent") val gstPercent: Double = 0.0
+)
+
+@Serializable
+data class CreateInvoiceRequest(
+    @SerialName("contact_id") val contactId: String? = null,
+    val items: List<CreateInvoiceItemRequest>
 )
 
 @Serializable
