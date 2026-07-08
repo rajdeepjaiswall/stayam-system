@@ -84,7 +84,7 @@ interface ApiService {
     suspend fun getInvoices(): Response<List<Invoice>>
 
     @POST("api/invoices")
-    suspend fun createInvoice(@Body body: Map<String, @JvmSuppressWildcards Any?>): Response<Invoice>
+    suspend fun createInvoice(@Body body: CreateInvoiceRequest): Response<Invoice>
 
     @GET("api/invoices/{id}")
     suspend fun getInvoice(@Path("id") id: String): Response<Invoice>
