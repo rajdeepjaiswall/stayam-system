@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
       AND (
         ${isAdmin(auth.user)} OR e.created_by = ${auth.user.sub} OR e.assigned_to = ${auth.user.sub}
       )
-      AND COALESCE(r.snoozed_until, r.remind_at) <= now() + INTERVAL '7 days'
+      AND COALESCE(r.snoozed_until, r.remind_at) <= now() + INTERVAL '365 days'
     ORDER BY COALESCE(r.snoozed_until, r.remind_at) ASC
   `;
 
