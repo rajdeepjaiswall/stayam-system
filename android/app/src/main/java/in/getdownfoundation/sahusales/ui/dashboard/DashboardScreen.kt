@@ -15,6 +15,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import `in`.getdownfoundation.sahusales.core.ActivityItem
+import `in`.getdownfoundation.sahusales.core.Event
 import `in`.getdownfoundation.sahusales.core.ReminderFeedItem
 import `in`.getdownfoundation.sahusales.ui.MainViewModel
 import `in`.getdownfoundation.sahusales.ui.theme.*
@@ -24,14 +25,18 @@ import java.util.*
 @Composable
 fun DashboardScreen(viewModel: MainViewModel) {
     val reminders by viewModel.reminders.collectAsState()
+    val events by viewModel.events.collectAsState()
     val activity by viewModel.activity.collectAsState()
     val currentUser by viewModel.currentUser.collectAsState()
-    val events by viewModel.events.collectAsState()
     var selectedTab by remember { mutableStateOf(0) }
     val isAdmin = currentUser?.role == "admin"
-    val tabs = if (isAdmin) listOf("MY", "TEAM", "ACTIVITY") else listOf("MY", "ACTIVITY")
 
-    // Refresh reminders & events whenever tab changes
+    val tabs = if (isAdmin)
+        listOf("REMINDERS", "UPCOMING", "CANCELLED", "TEAM", "ACTIVITY")
+    else
+        listOf("REMINDERS", "UPCOMING", "CANCELLED", "ACTIVITY")
+
+    // Refresh all data whenever tab changes
     LaunchedEffect(selectedTab) {
         viewModel.loadReminders()
         viewModel.loadEvents()
@@ -41,15 +46,15 @@ fun DashboardScreen(viewModel: MainViewModel) {
     Column(Modifier.fillMaxSize()) {
         Text(
             "Dashboard",
-            fontSize = 22.sp,
-            fontWeight = FontWeight.Bold,
-            color = Primary,
+            fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Primary,
             modifier = Modifier.padding(16.dp)
         )
-        TabRow(
+
+        ScrollableTabRow(
             selectedTabIndex = selectedTab,
             containerColor = Surface,
             contentColor = Primary,
+            edgePadding = 0.dp,
             indicator = { tabPositions ->
                 TabRowDefaults.Indicator(
                     modifier = Modifier.tabIndicatorOffset(tabPositions[selectedTab]),
@@ -59,22 +64,34 @@ fun DashboardScreen(viewModel: MainViewModel) {
         ) {
             tabs.forEachIndexed { i, title ->
                 Tab(selected = selectedTab == i, onClick = { selectedTab = i }) {
-                    Text(title, modifier = Modifier.padding(vertical = 12.dp))
+                    Text(
+                        title, fontSize = 11.sp,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp)
+                    )
                 }
             }
         }
 
         when (tabs[selectedTab]) {
-            "MY" -> {
-                val myId = currentUser?.id
-                val myReminders = reminders.filter { r ->
-                    // Show all pending/snoozed reminders for current user's events
-                    r.status in listOf("pending", "snoozed")
-                }
-                MyRemindersTab(myReminders)
+            "REMINDERS" -> {
+                val myReminders = reminders.filter { it.status in listOf("pending", "snoozed") }
+                RemindersTab(myReminders)
+            }
+            "UPCOMING" -> {
+                val upcoming = events.filter { it.status == "upcoming" }
+                    .sortedBy { e ->
+                        e.reminders
+                            .filter { it.status == "pending" || it.status == "snoozed" }
+                            .mapNotNull { r -> parseMillis(r.remindAt).takeIf { it > 0 } }
+                            .minOrNull() ?: Long.MAX_VALUE
+                    }
+                UpcomingEventsTab(upcoming)
+            }
+            "CANCELLED" -> {
+                val cancelled = events.filter { it.status == "cancelled" }
+                CancelledEventsTab(cancelled)
             }
             "TEAM" -> {
-                // Admin sees all reminders grouped by event/contact
                 TeamRemindersTab(reminders)
             }
             "ACTIVITY" -> ActivityTab(activity)
@@ -82,23 +99,17 @@ fun DashboardScreen(viewModel: MainViewModel) {
     }
 }
 
+// ── Reminders Tab ─────────────────────────────────────────────────────────────
+
 @Composable
-fun MyRemindersTab(reminders: List<ReminderFeedItem>) {
+fun RemindersTab(reminders: List<ReminderFeedItem>) {
     if (reminders.isEmpty()) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("🔔", fontSize = 40.sp)
-                Spacer(Modifier.height(8.dp))
-                Text("No upcoming reminders", color = TextSecondary, fontSize = 15.sp)
-                Text("Create an event with a reminder to see it here", color = TextSecondary, fontSize = 12.sp)
-            }
-        }
+        EmptyState("🔔", "No reminders", "Set a reminder when creating an event to see it here")
         return
     }
-
     val now = System.currentTimeMillis()
-    val overdue = reminders.filter { parseMillis(it.effectiveTime) < now }
-    val upcoming = reminders.filter { parseMillis(it.effectiveTime) >= now }
+    val overdue = reminders.filter { parseMillis(it.effectiveTime) < now }.sortedByDescending { parseMillis(it.effectiveTime) }
+    val upcoming = reminders.filter { parseMillis(it.effectiveTime) >= now }.sortedBy { parseMillis(it.effectiveTime) }
 
     LazyColumn(
         Modifier.fillMaxSize().padding(12.dp),
@@ -106,35 +117,19 @@ fun MyRemindersTab(reminders: List<ReminderFeedItem>) {
     ) {
         if (overdue.isNotEmpty()) {
             item {
-                Text("OVERDUE", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = StatusOverdue,
-                    modifier = Modifier.padding(vertical = 4.dp))
+                SectionHeader("OVERDUE", StatusOverdue)
             }
             items(overdue) { r -> ReminderCard(r) }
         }
         if (upcoming.isNotEmpty()) {
             item {
-                Text("UPCOMING", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = StatusUpcoming,
-                    modifier = Modifier.padding(top = if (overdue.isNotEmpty()) 8.dp else 4.dp, bottom = 4.dp))
+                SectionHeader(
+                    "UPCOMING",
+                    StatusUpcoming,
+                    topPad = if (overdue.isNotEmpty()) 12.dp else 0.dp
+                )
             }
             items(upcoming) { r -> ReminderCard(r) }
-        }
-    }
-}
-
-@Composable
-fun TeamRemindersTab(reminders: List<ReminderFeedItem>) {
-    if (reminders.isEmpty()) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("No team reminders", color = TextSecondary)
-        }
-        return
-    }
-    LazyColumn(
-        Modifier.fillMaxSize().padding(12.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        items(reminders.sortedBy { parseMillis(it.effectiveTime) }) { r ->
-            ReminderCard(r)
         }
     }
 }
@@ -165,7 +160,6 @@ fun ReminderCard(r: ReminderFeedItem) {
                     .background(borderColor, RoundedCornerShape(topStart = 12.dp, bottomStart = 12.dp))
             )
             Column(Modifier.padding(12.dp).weight(1f)) {
-                // Tag badge
                 r.tagName?.let { tag ->
                     Surface(color = tagColor.copy(alpha = 0.15f), shape = RoundedCornerShape(50)) {
                         Text(
@@ -176,51 +170,29 @@ fun ReminderCard(r: ReminderFeedItem) {
                     }
                     Spacer(Modifier.height(4.dp))
                 }
-
-                // Contact name (primary)
-                Text(
-                    r.contactName ?: r.eventTitle,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 16.sp
-                )
-                r.contactOrganisation?.let {
-                    Text(it, fontSize = 13.sp, color = TextSecondary)
-                }
-
-                // Event title
+                Text(r.contactName ?: r.eventTitle, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                r.contactOrganisation?.let { Text(it, fontSize = 12.sp, color = TextSecondary) }
                 if (r.contactName != null) {
                     Text("📋 ${r.eventTitle}", fontSize = 13.sp, color = TextPrimary)
                 }
-
-                r.eventNotes?.let {
+                r.eventNotes?.takeIf { it.isNotBlank() }?.let {
                     Text(it, fontSize = 12.sp, color = TextSecondary, maxLines = 2)
                 }
-
                 Spacer(Modifier.height(4.dp))
-
-                // Time
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         "⏰ ${formatTime(r.effectiveTime)}",
                         fontSize = 12.sp,
-                        color = if (isPast) StatusOverdue else TextSecondary,
-                        fontWeight = if (isPast) FontWeight.Medium else FontWeight.Normal
+                        color = if (isPast) StatusOverdue else StatusUpcoming,
+                        fontWeight = if (isPast) FontWeight.Bold else FontWeight.Normal
                     )
                     if (r.status == "snoozed") {
-                        Spacer(Modifier.width(8.dp))
-                        Surface(color = StatusSnoozed.copy(alpha = 0.15f), shape = RoundedCornerShape(50)) {
-                            Text("💤 SNOOZED", fontSize = 9.sp, color = StatusSnoozed,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
-                        }
+                        Spacer(Modifier.width(6.dp))
+                        StatusBadge("💤 SNOOZED", StatusSnoozed)
                     }
                     if (isPast && r.status == "pending") {
-                        Spacer(Modifier.width(8.dp))
-                        Surface(color = StatusOverdue.copy(alpha = 0.15f), shape = RoundedCornerShape(50)) {
-                            Text("OVERDUE", fontSize = 9.sp, color = StatusOverdue,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
-                        }
+                        Spacer(Modifier.width(6.dp))
+                        StatusBadge("OVERDUE", StatusOverdue)
                     }
                 }
             }
@@ -228,12 +200,148 @@ fun ReminderCard(r: ReminderFeedItem) {
     }
 }
 
+// ── Upcoming Events Tab ────────────────────────────────────────────────────────
+
+@Composable
+fun UpcomingEventsTab(events: List<Event>) {
+    if (events.isEmpty()) {
+        EmptyState("📅", "No upcoming events", "Create an event to see it here")
+        return
+    }
+    LazyColumn(
+        Modifier.fillMaxSize().padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        items(events) { e -> DashboardEventCard(e, Primary) }
+    }
+}
+
+// ── Cancelled Events Tab ───────────────────────────────────────────────────────
+
+@Composable
+fun CancelledEventsTab(events: List<Event>) {
+    if (events.isEmpty()) {
+        EmptyState("✅", "No cancelled events", "Events you cancel will appear here")
+        return
+    }
+    LazyColumn(
+        Modifier.fillMaxSize().padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        items(events) { e -> DashboardEventCard(e, StatusOverdue) }
+    }
+}
+
+@Composable
+fun DashboardEventCard(event: Event, accentColor: Color) {
+    val tagColor = try {
+        Color(android.graphics.Color.parseColor(event.tagColor ?: "#1565C0"))
+    } catch (e: Exception) { Primary }
+
+    val now = System.currentTimeMillis()
+    val nextReminder = event.reminders
+        .filter { it.status == "pending" || it.status == "snoozed" }
+        .mapNotNull { r -> parseMillis(r.remindAt).takeIf { it > 0 } }
+        .minOrNull()
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(2.dp)
+    ) {
+        Row(Modifier.fillMaxWidth()) {
+            Box(
+                Modifier.width(5.dp).fillMaxHeight()
+                    .background(accentColor, RoundedCornerShape(topStart = 12.dp, bottomStart = 12.dp))
+            )
+            Column(Modifier.padding(12.dp).weight(1f)) {
+                // Tag + status row
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    event.tagName?.let {
+                        Surface(color = tagColor.copy(alpha = 0.15f), shape = RoundedCornerShape(50)) {
+                            Text(
+                                it.uppercase(), fontSize = 10.sp, color = tagColor,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                            )
+                        }
+                    } ?: Spacer(Modifier.size(1.dp))
+
+                    Surface(color = accentColor.copy(alpha = 0.12f), shape = RoundedCornerShape(50)) {
+                        Text(
+                            event.status.uppercase(), fontSize = 9.sp, color = accentColor,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                        )
+                    }
+                }
+                Spacer(Modifier.height(6.dp))
+
+                Text(event.title, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                event.contactName?.let {
+                    Text(it, fontSize = 13.sp, color = TextPrimary, fontWeight = FontWeight.Medium)
+                }
+                event.contactOrganisation?.let { Text(it, fontSize = 12.sp, color = TextSecondary) }
+                event.assigneeName?.let {
+                    Text("👤 $it", fontSize = 12.sp, color = Primary.copy(alpha = 0.8f))
+                }
+                event.notes?.takeIf { it.isNotBlank() }?.let {
+                    Spacer(Modifier.height(2.dp))
+                    Text(it, fontSize = 12.sp, color = TextSecondary, maxLines = 2)
+                }
+
+                // Next reminder
+                if (nextReminder != null) {
+                    Spacer(Modifier.height(6.dp))
+                    val isOverdue = nextReminder < now
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            "⏰ ${formatTime(event.reminders.first { it.status == "pending" || it.status == "snoozed" }.remindAt)}",
+                            fontSize = 12.sp,
+                            color = if (isOverdue) StatusOverdue else StatusUpcoming,
+                            fontWeight = if (isOverdue) FontWeight.Bold else FontWeight.Normal
+                        )
+                        if (isOverdue) {
+                            Spacer(Modifier.width(6.dp))
+                            StatusBadge("OVERDUE", StatusOverdue)
+                        }
+                    }
+                } else if (event.status == "upcoming") {
+                    Spacer(Modifier.height(4.dp))
+                    Text("No reminder set", fontSize = 12.sp, color = TextSecondary)
+                }
+            }
+        }
+    }
+}
+
+// ── Team Tab ───────────────────────────────────────────────────────────────────
+
+@Composable
+fun TeamRemindersTab(reminders: List<ReminderFeedItem>) {
+    if (reminders.isEmpty()) {
+        EmptyState("👥", "No team reminders", "")
+        return
+    }
+    LazyColumn(
+        Modifier.fillMaxSize().padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        items(reminders.sortedBy { parseMillis(it.effectiveTime) }) { r -> ReminderCard(r) }
+    }
+}
+
+// ── Activity Tab ───────────────────────────────────────────────────────────────
+
 @Composable
 fun ActivityTab(items: List<ActivityItem>) {
     if (items.isEmpty()) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("No activity yet", color = TextSecondary)
-        }
+        EmptyState("📊", "No activity yet", "Activity from your events will appear here")
         return
     }
     LazyColumn(
@@ -265,17 +373,53 @@ fun ActivityRow(item: ActivityItem) {
             Column {
                 Text(
                     "${item.eventTitle ?: ""} — ${item.contactName ?: ""}",
-                    fontWeight = FontWeight.Medium
+                    fontWeight = FontWeight.Medium, fontSize = 14.sp
                 )
                 Text(
                     "${item.actorName ?: "System"} · ${formatTime(item.createdAt)}",
-                    fontSize = 12.sp,
-                    color = TextSecondary
+                    fontSize = 12.sp, color = TextSecondary
                 )
             }
         }
     }
 }
+
+// ── Shared helpers ─────────────────────────────────────────────────────────────
+
+@Composable
+fun SectionHeader(label: String, color: Color, topPad: Dp = 0.dp) {
+    Text(
+        label, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = color,
+        modifier = Modifier.padding(top = topPad, bottom = 4.dp)
+    )
+}
+
+@Composable
+fun StatusBadge(text: String, color: Color) {
+    Surface(color = color.copy(alpha = 0.12f), shape = RoundedCornerShape(50)) {
+        Text(
+            text, fontSize = 9.sp, color = color, fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+        )
+    }
+}
+
+@Composable
+fun EmptyState(emoji: String, title: String, subtitle: String) {
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(emoji, fontSize = 40.sp)
+            Spacer(Modifier.height(8.dp))
+            Text(title, color = TextSecondary, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+            if (subtitle.isNotBlank()) {
+                Spacer(Modifier.height(4.dp))
+                Text(subtitle, color = TextSecondary, fontSize = 12.sp)
+            }
+        }
+    }
+}
+
+// ── Date/time helpers (used by TeamScreen + EventsScreen imports) ──────────────
 
 fun parseMillis(iso: String): Long {
     return try {
