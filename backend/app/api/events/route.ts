@@ -31,7 +31,9 @@ export async function GET(req: NextRequest) {
       AND (${status} IS NULL OR e.status = ${status})
       AND (${tag_id} IS NULL OR e.tag_id = ${tag_id}::uuid)
       AND (${assigned_to} IS NULL OR e.assigned_to = ${assigned_to}::uuid)
-    ORDER BY e.created_at DESC
+    ORDER BY
+      (SELECT MIN(r.remind_at) FROM reminders r WHERE r.event_id = e.id AND r.status = 'pending') ASC NULLS LAST,
+      e.created_at DESC
   `;
   return NextResponse.json(events);
 }
