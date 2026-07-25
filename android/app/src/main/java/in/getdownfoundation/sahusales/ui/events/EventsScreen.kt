@@ -98,14 +98,7 @@ fun EventsScreen(viewModel: MainViewModel) {
             TabRow(
                 selectedTabIndex = selectedTab,
                 containerColor = Surface,
-                contentColor = Primary,
-                indicator = { tabPositions ->
-                    TabRowDefaults.Indicator(
-                        modifier = Modifier.tabIndicatorOffset(tabPositions[selectedTab]),
-                        color = Primary
-                    )
-                }
-            ) {
+                contentColor = Primary) {
                 tabs.forEachIndexed { i, label ->
                     val count = when (label) {
                         "UPCOMING" -> events.count { it.status == "upcoming" }
