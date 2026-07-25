@@ -6,7 +6,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
-import androidx.compose.material3.tabIndicatorOffset
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -55,14 +54,7 @@ fun DashboardScreen(viewModel: MainViewModel) {
             selectedTabIndex = selectedTab,
             containerColor = Surface,
             contentColor = Primary,
-            edgePadding = 0.dp,
-            indicator = { tabPositions ->
-                TabRowDefaults.Indicator(
-                    modifier = Modifier.tabIndicatorOffset(tabPositions[selectedTab]),
-                    color = Primary
-                )
-            }
-        ) {
+            edgePadding = 0.dp) {
             tabs.forEachIndexed { i, title ->
                 Tab(selected = selectedTab == i, onClick = { selectedTab = i }) {
                     Text(
