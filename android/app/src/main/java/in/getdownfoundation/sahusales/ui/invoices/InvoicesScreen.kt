@@ -178,7 +178,7 @@ fun InvoiceDetailSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         containerColor = Color.White,
-        sheetState = rememberModalBottomSheetState(skipPartialExpansion = true)
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     ) {
         LazyColumn(
             Modifier.fillMaxWidth().padding(horizontal = 20.dp),
