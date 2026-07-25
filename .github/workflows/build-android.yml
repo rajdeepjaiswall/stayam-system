@@ -11,6 +11,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
@@ -55,16 +57,22 @@ jobs:
         env:
           GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx4g"
 
-      - name: Verify APK exists
-        run: |
-          echo "=== APK output directory ==="
-          find android/app/build/outputs -name "*.apk" 2>/dev/null || echo "No APKs found"
-          ls -lh android/app/build/outputs/apk/debug/ 2>/dev/null || echo "debug dir missing"
-
-      - name: Upload APK
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
+        continue-on-error: true
+        id: upload_v4
         with:
           name: Sahu-Sales-APK
           path: android/app/build/outputs/apk/debug/*.apk
           retention-days: 30
           if-no-files-found: error
+
+      - name: Upload APK to GitHub Release (fallback)
+        if: steps.upload_v4.outcome == 'failure'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          APK=$(find android/app/build/outputs/apk/debug -name '*.apk' | head -1)
+          TAG="apk-$(date +%Y%m%d-%H%M%S)"
+          gh release create "$TAG" "$APK" --title "Debug APK $TAG" --notes "Automated debug build" --prerelease
+          echo "APK uploaded as GitHub Release: $TAG"
