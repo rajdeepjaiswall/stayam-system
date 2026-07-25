@@ -12,7 +12,9 @@ jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: write   # needed for gh release create (fallback)
+      actions: write    # needed to delete old artifacts and free quota
+
     steps:
       - uses: actions/checkout@v4
 
@@ -27,9 +29,25 @@ jobs:
       - name: Accept licenses
         run: yes | sdkmanager --licenses || true
 
-      - name: Write local.properties
+      - name: Clean old artifacts to free storage quota
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          echo "sdk.dir=$ANDROID_SDK_ROOT" > android/local.properties
+          echo "=== Deleting old android-apk artifacts to free quota ==="
+          IDS=$(gh api "repos/${{ github.repository }}/actions/artifacts?name=android-apk&per_page=100" \
+            --jq '.artifacts[].id' 2>/dev/null || echo "")
+          if [ -n "$IDS" ]; then
+            for ID in $IDS; do
+              echo "Deleting artifact ID: $ID"
+              gh api -X DELETE "repos/${{ github.repository }}/actions/artifacts/$ID" || true
+            done
+            echo "Old artifacts cleared."
+          else
+            echo "No old android-apk artifacts found."
+          fi
+
+      - name: Write local.properties
+        run: echo "sdk.dir=$ANDROID_SDK_ROOT" > android/local.properties
 
       - name: Write Config.kt with backend URL
         env:
@@ -57,22 +75,41 @@ jobs:
         env:
           GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx4g"
 
-      - name: Upload APK artifact
+      - name: Find APK
+        run: |
+          find . -name "*.apk"
+          ls -R android/app/build/outputs/ 2>/dev/null || ls -R
+          APK_COUNT=$(find . -name "*.apk" | wc -l)
+          if [ "$APK_COUNT" -eq 0 ]; then
+            echo "ERROR: No APK files were generated. Gradle build may have failed silently."
+            echo "Listing full build directory:"
+            ls -R android/app/build/ || true
+            exit 1
+          fi
+          echo "=== $APK_COUNT APK(s) found ==="
+          find . -name "*.apk" -exec ls -lh {} \;
+
+      - name: Upload APK
+        id: upload_artifact
         uses: actions/upload-artifact@v4
         continue-on-error: true
-        id: upload_v4
         with:
-          name: Sahu-Sales-APK
-          path: android/app/build/outputs/apk/debug/*.apk
+          name: android-apk
+          path: |
+            **/*.apk
           retention-days: 30
           if-no-files-found: error
 
-      - name: Upload APK to GitHub Release (fallback)
-        if: steps.upload_v4.outcome == 'failure'
+      - name: Upload APK to GitHub Release (fallback if artifact upload fails)
+        if: steps.upload_artifact.outcome == 'failure'
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          APK=$(find android/app/build/outputs/apk/debug -name '*.apk' | head -1)
+          APK=$(find . -name "*.apk" | head -1)
           TAG="apk-$(date +%Y%m%d-%H%M%S)"
-          gh release create "$TAG" "$APK" --title "Debug APK $TAG" --notes "Automated debug build" --prerelease
-          echo "APK uploaded as GitHub Release: $TAG"
+          gh release create "$TAG" "$APK" \
+            --title "Debug APK $TAG" \
+            --notes "Automated debug build. Artifact quota was full; uploaded as release instead." \
+            --prerelease
+          echo "Fallback release created: $TAG"
+          echo "Download: https://github.com/${{ github.repository }}/releases/tag/$TAG"
