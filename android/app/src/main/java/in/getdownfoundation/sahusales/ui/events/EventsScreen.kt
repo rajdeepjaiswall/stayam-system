@@ -98,7 +98,8 @@ fun EventsScreen(viewModel: MainViewModel) {
             TabRow(
                 selectedTabIndex = selectedTab,
                 containerColor = Surface,
-                contentColor = Primary) {
+                contentColor = Primary
+            ) {
                 tabs.forEachIndexed { i, label ->
                     val count = when (label) {
                         "UPCOMING" -> events.count { it.status == "upcoming" }
@@ -167,9 +168,16 @@ fun EventsScreen(viewModel: MainViewModel) {
                     try {
                         val resp = withContext(Dispatchers.IO) { viewModel.api()?.createEvent(body) }
                         if (resp?.isSuccessful == true) {
+                            // Optimistic update: immediately show the new event in the list
+                            resp.body()?.let { viewModel.onEventCreated(it) }
                             viewModel.loadEvents()
                             viewModel.loadReminders()
                             showCreate = false
+                            val msg = if (body.reminders.isNotEmpty())
+                                "Reminder saved successfully"
+                            else
+                                "Event saved successfully"
+                            snackbarHostState.showSnackbar(msg)
                         } else {
                             snackbarHostState.showSnackbar(resp?.errorBody()?.string() ?: "Failed")
                         }
