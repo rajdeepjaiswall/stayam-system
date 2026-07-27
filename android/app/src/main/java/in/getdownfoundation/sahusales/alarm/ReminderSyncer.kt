@@ -45,11 +45,13 @@ object ReminderSyncer {
             val reminders = resp.body() ?: emptyList()
             Log.d(TAG, "Synced ${reminders.size} reminders")
 
-            // Cache reminders
+            // Capture old IDs BEFORE overwriting the cache, so we cancel the right alarms
+            val oldIds = store.getCachedReminders().map { it.id }
+
+            // Cache new reminders
             store.saveReminders(reminders)
 
-            // Cancel old alarms for previously cached IDs
-            val oldIds = store.getCachedReminders().map { it.id }
+            // Cancel alarms for the previously-cached reminders
             AlarmScheduler.cancelAll(context, oldIds)
 
             // Schedule new alarms
