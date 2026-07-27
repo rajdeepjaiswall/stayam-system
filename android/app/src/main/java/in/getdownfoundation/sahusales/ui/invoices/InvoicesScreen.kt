@@ -1,5 +1,12 @@
 package `in`.getdownfoundation.sahusales.ui.invoices
 
+import android.content.Context
+import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.Typeface
+import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -8,15 +15,21 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import androidx.core.content.FileProvider
 import `in`.getdownfoundation.sahusales.core.Contact
 import `in`.getdownfoundation.sahusales.core.Invoice
 import `in`.getdownfoundation.sahusales.core.CreateInvoiceRequest
@@ -26,6 +39,8 @@ import `in`.getdownfoundation.sahusales.ui.theme.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
+import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -35,6 +50,7 @@ fun InvoicesScreen(viewModel: MainViewModel) {
     val invoices by viewModel.invoices.collectAsState()
     val contacts by viewModel.contacts.collectAsState()
     val currentUser by viewModel.currentUser.collectAsState()
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var showCreate by remember { mutableStateOf(false) }
     var selectedStatus by remember { mutableStateOf<String?>(null) }
@@ -89,6 +105,8 @@ fun InvoicesScreen(viewModel: MainViewModel) {
         InvoiceDetailSheet(
             invoice = inv,
             currentUser = currentUser,
+            context = context,
+            orgName = currentUser?.organisationName ?: "Sahu Sales",
             onDismiss = { detailInvoice = null },
             onStatusChange = { newStatus ->
                 scope.launch {
@@ -172,176 +190,216 @@ fun InvoiceCard(inv: Invoice, onClick: () -> Unit = {}) {
 fun InvoiceDetailSheet(
     invoice: Invoice,
     currentUser: `in`.getdownfoundation.sahusales.core.User?,
+    context: Context,
+    orgName: String,
     onDismiss: () -> Unit,
     onStatusChange: (String) -> Unit
 ) {
-    ModalBottomSheet(
+    val scope = rememberCoroutineScope()
+
+    Dialog(
         onDismissRequest = onDismiss,
-        containerColor = Color.White,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
-        LazyColumn(
-            Modifier.fillMaxWidth().padding(horizontal = 20.dp),
-            contentPadding = PaddingValues(bottom = 40.dp)
-        ) {
-            item {
-                // ── Header ──────────────────────────────────────────
-                Box(
-                    Modifier.fillMaxWidth()
-                        .background(Primary, RoundedCornerShape(12.dp))
-                        .padding(20.dp)
-                ) {
-                    Column {
-                        val orgName = currentUser?.organisationName ?: "Sahu Sales"
-                        Text(orgName, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
-                        Spacer(Modifier.height(12.dp))
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Column {
-                                Text("INVOICE", color = Color.White.copy(alpha = 0.7f), fontSize = 11.sp)
-                                Text(invoice.invoiceNumber, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                            }
-                            Column(horizontalAlignment = Alignment.End) {
-                                Text("DATE", color = Color.White.copy(alpha = 0.7f), fontSize = 11.sp)
-                                Text(
-                                    formatInvoiceDate(invoice.createdAt),
-                                    color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp
-                                )
-                            }
-                        }
-                        Spacer(Modifier.height(4.dp))
-                        Text("FY ${invoice.financialYear}", color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp)
-                    }
-                }
-
-                Spacer(Modifier.height(16.dp))
-
-                // ── Bill To ─────────────────────────────────────────
-                if (invoice.contactName != null) {
-                    Surface(color = Surface, shape = RoundedCornerShape(8.dp)) {
-                        Column(Modifier.fillMaxWidth().padding(12.dp)) {
-                            Text("BILL TO", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = TextSecondary)
-                            Spacer(Modifier.height(4.dp))
-                            Text(invoice.contactName, fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                            invoice.contactOrganisation?.let {
-                                Text(it, color = TextSecondary, fontSize = 13.sp)
-                            }
-                        }
-                    }
-                    Spacer(Modifier.height(16.dp))
-                }
-
-                // ── Status Badge ─────────────────────────────────────
-                val statusColor = when (invoice.status) {
-                    "paid" -> StatusUpcoming
-                    "sent" -> Primary
-                    "cancelled" -> StatusOverdue
-                    else -> TextSecondary
-                }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Status: ", fontSize = 13.sp, color = TextSecondary)
-                    Surface(color = statusColor.copy(alpha = 0.15f), shape = RoundedCornerShape(50)) {
+        Scaffold(
+            modifier = Modifier.fillMaxSize(),
+            topBar = {
+                TopAppBar(
+                    title = {
                         Text(
-                            invoice.status.uppercase(), fontSize = 12.sp, color = statusColor,
+                            invoice.invoiceNumber,
                             fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp)
+                            fontSize = 18.sp
                         )
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = onDismiss) {
+                            Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                        }
+                    },
+                    actions = {
+                        IconButton(onClick = {
+                            scope.launch(Dispatchers.IO) {
+                                val bmp = generateInvoiceBitmap(invoice, orgName)
+                                shareInvoiceBitmap(context, bmp, invoice.invoiceNumber)
+                            }
+                        }) {
+                            Icon(Icons.Default.Share, contentDescription = "Share Invoice")
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.White)
+                )
+            },
+            containerColor = Color.White
+        ) { innerPadding ->
+            LazyColumn(
+                Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+                    .padding(horizontal = 20.dp),
+                contentPadding = PaddingValues(bottom = 40.dp)
+            ) {
+                item {
+                    Spacer(Modifier.height(8.dp))
+
+                    // ── Header ──────────────────────────────────────────
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .background(Primary, RoundedCornerShape(12.dp))
+                            .padding(20.dp)
+                    ) {
+                        Column {
+                            Text(orgName, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                            Spacer(Modifier.height(12.dp))
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Column {
+                                    Text("INVOICE", color = Color.White.copy(alpha = 0.7f), fontSize = 11.sp)
+                                    Text(invoice.invoiceNumber, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                                }
+                                Column(horizontalAlignment = Alignment.End) {
+                                    Text("DATE", color = Color.White.copy(alpha = 0.7f), fontSize = 11.sp)
+                                    Text(
+                                        formatInvoiceDate(invoice.createdAt),
+                                        color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp
+                                    )
+                                }
+                            }
+                            Spacer(Modifier.height(4.dp))
+                            Text("FY ${invoice.financialYear}", color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp)
+                        }
                     }
-                }
 
-                Spacer(Modifier.height(16.dp))
+                    Spacer(Modifier.height(16.dp))
 
-                // ── Line Items Header ────────────────────────────────
-                Divider(color = Border)
-                Row(
-                    Modifier.fillMaxWidth().padding(vertical = 8.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text("ITEM", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = TextSecondary, modifier = Modifier.weight(2.5f))
-                    Text("QTY", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = TextSecondary, modifier = Modifier.weight(1f), textAlign = TextAlign.Center)
-                    Text("RATE", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = TextSecondary, modifier = Modifier.weight(1.2f), textAlign = TextAlign.End)
-                    Text("GST", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = TextSecondary, modifier = Modifier.weight(0.8f), textAlign = TextAlign.End)
-                    Text("TOTAL", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = TextSecondary, modifier = Modifier.weight(1.2f), textAlign = TextAlign.End)
-                }
-                Divider(color = Border)
-            }
+                    // ── Bill To ─────────────────────────────────────────
+                    if (invoice.contactName != null) {
+                        Surface(color = Surface, shape = RoundedCornerShape(8.dp)) {
+                            Column(Modifier.fillMaxWidth().padding(12.dp)) {
+                                Text("BILL TO", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = TextSecondary)
+                                Spacer(Modifier.height(4.dp))
+                                Text(invoice.contactName, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                                invoice.contactOrganisation?.let {
+                                    Text(it, color = TextSecondary, fontSize = 13.sp)
+                                }
+                            }
+                        }
+                        Spacer(Modifier.height(16.dp))
+                    }
 
-            // ── Line Items ───────────────────────────────────────
-            items(invoice.items) { item ->
-                val lineAmt = item.lineTotal ?: (item.qty * item.rate)
-                val lineTax = item.lineTax ?: (lineAmt * item.gstPercent / 100.0)
-                val lineGross = lineAmt + lineTax
-                Row(
-                    Modifier.fillMaxWidth().padding(vertical = 10.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.Top
-                ) {
-                    Text(item.name, fontSize = 13.sp, modifier = Modifier.weight(2.5f))
-                    Text(
-                        formatQty(item.qty), fontSize = 13.sp,
-                        modifier = Modifier.weight(1f), textAlign = TextAlign.Center
-                    )
-                    Text(
-                        "₹${formatAmt(item.rate)}", fontSize = 13.sp,
-                        modifier = Modifier.weight(1.2f), textAlign = TextAlign.End
-                    )
-                    Text(
-                        "${item.gstPercent.toInt()}%", fontSize = 13.sp, color = TextSecondary,
-                        modifier = Modifier.weight(0.8f), textAlign = TextAlign.End
-                    )
-                    Text(
-                        "₹${formatAmt(lineGross)}", fontSize = 13.sp, fontWeight = FontWeight.Medium,
-                        modifier = Modifier.weight(1.2f), textAlign = TextAlign.End
-                    )
-                }
-                Divider(color = Border.copy(alpha = 0.5f))
-            }
+                    // ── Status Badge ─────────────────────────────────────
+                    val statusColor = when (invoice.status) {
+                        "paid" -> StatusUpcoming
+                        "sent" -> Primary
+                        "cancelled" -> StatusOverdue
+                        else -> TextSecondary
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Status: ", fontSize = 13.sp, color = TextSecondary)
+                        Surface(color = statusColor.copy(alpha = 0.15f), shape = RoundedCornerShape(50)) {
+                            Text(
+                                invoice.status.uppercase(), fontSize = 12.sp, color = statusColor,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp)
+                            )
+                        }
+                    }
 
-            item {
-                Spacer(Modifier.height(8.dp))
+                    Spacer(Modifier.height(16.dp))
 
-                // ── Totals ───────────────────────────────────────────
-                Column(
-                    Modifier.fillMaxWidth(),
-                    horizontalAlignment = Alignment.End
-                ) {
-                    TotalRow("Subtotal", "₹${formatAmt(invoice.subtotal)}")
-                    TotalRow("GST", "₹${formatAmt(invoice.tax)}")
-                    Divider(Modifier.width(200.dp), color = Border)
-                    Spacer(Modifier.height(4.dp))
+                    // ── Line Items Header ────────────────────────────────
+                    Divider(color = Border)
                     Row(
-                        Modifier.width(200.dp),
+                        Modifier.fillMaxWidth().padding(vertical = 8.dp),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Text("GRAND TOTAL", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                        Text("₹${formatAmt(invoice.total)}", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Primary)
+                        Text("ITEM", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = TextSecondary, modifier = Modifier.weight(2.5f))
+                        Text("QTY", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = TextSecondary, modifier = Modifier.weight(1f), textAlign = TextAlign.Center)
+                        Text("RATE", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = TextSecondary, modifier = Modifier.weight(1.2f), textAlign = TextAlign.End)
+                        Text("GST", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = TextSecondary, modifier = Modifier.weight(0.8f), textAlign = TextAlign.End)
+                        Text("TOTAL", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = TextSecondary, modifier = Modifier.weight(1.2f), textAlign = TextAlign.End)
                     }
+                    Divider(color = Border)
                 }
 
-                Spacer(Modifier.height(24.dp))
+                // ── Line Items ───────────────────────────────────────
+                items(invoice.items) { item ->
+                    val lineAmt = item.lineTotal ?: (item.qty * item.rate)
+                    val lineTax = item.lineTax ?: (lineAmt * item.gstPercent / 100.0)
+                    val lineGross = lineAmt + lineTax
+                    Row(
+                        Modifier.fillMaxWidth().padding(vertical = 10.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.Top
+                    ) {
+                        Text(item.name, fontSize = 13.sp, modifier = Modifier.weight(2.5f))
+                        Text(
+                            formatQty(item.qty), fontSize = 13.sp,
+                            modifier = Modifier.weight(1f), textAlign = TextAlign.Center
+                        )
+                        Text(
+                            "₹${formatAmt(item.rate)}", fontSize = 13.sp,
+                            modifier = Modifier.weight(1.2f), textAlign = TextAlign.End
+                        )
+                        Text(
+                            "${item.gstPercent.toInt()}%", fontSize = 13.sp, color = TextSecondary,
+                            modifier = Modifier.weight(0.8f), textAlign = TextAlign.End
+                        )
+                        Text(
+                            "₹${formatAmt(lineGross)}", fontSize = 13.sp, fontWeight = FontWeight.Medium,
+                            modifier = Modifier.weight(1.2f), textAlign = TextAlign.End
+                        )
+                    }
+                    Divider(color = Border.copy(alpha = 0.5f))
+                }
 
-                // ── Action Buttons ───────────────────────────────────
-                if (invoice.status == "draft") {
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(
-                            onClick = { onStatusChange("cancelled") },
-                            modifier = Modifier.weight(1f),
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = StatusOverdue)
-                        ) { Text("CANCEL") }
+                item {
+                    Spacer(Modifier.height(8.dp))
+
+                    // ── Totals ───────────────────────────────────────────
+                    Column(
+                        Modifier.fillMaxWidth(),
+                        horizontalAlignment = Alignment.End
+                    ) {
+                        TotalRow("Subtotal", "₹${formatAmt(invoice.subtotal)}")
+                        TotalRow("GST", "₹${formatAmt(invoice.tax)}")
+                        Divider(Modifier.width(200.dp), color = Border)
+                        Spacer(Modifier.height(4.dp))
+                        Row(
+                            Modifier.width(200.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("GRAND TOTAL", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                            Text("₹${formatAmt(invoice.total)}", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Primary)
+                        }
+                    }
+
+                    Spacer(Modifier.height(24.dp))
+
+                    // ── Action Buttons ───────────────────────────────────
+                    if (invoice.status == "draft") {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedButton(
+                                onClick = { onStatusChange("cancelled") },
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = StatusOverdue)
+                            ) { Text("CANCEL") }
+                            Button(
+                                onClick = { onStatusChange("sent") },
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.buttonColors(containerColor = Primary)
+                            ) { Text("MARK SENT") }
+                        }
+                    } else if (invoice.status == "sent") {
                         Button(
-                            onClick = { onStatusChange("sent") },
-                            modifier = Modifier.weight(1f),
-                            colors = ButtonDefaults.buttonColors(containerColor = Primary)
-                        ) { Text("MARK SENT") }
+                            onClick = { onStatusChange("paid") },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(containerColor = StatusUpcoming)
+                        ) { Text("MARK PAID ✓", color = Color.White) }
                     }
-                } else if (invoice.status == "sent") {
-                    Button(
-                        onClick = { onStatusChange("paid") },
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.buttonColors(containerColor = StatusUpcoming)
-                    ) { Text("MARK PAID ✓", color = Color.White) }
-                }
 
-                Spacer(Modifier.height(16.dp))
+                    Spacer(Modifier.height(16.dp))
+                }
             }
         }
     }
@@ -355,6 +413,167 @@ fun TotalRow(label: String, value: String) {
     ) {
         Text(label, fontSize = 13.sp, color = TextSecondary)
         Text(value, fontSize = 13.sp)
+    }
+}
+
+// ── Invoice Image Generation ─────────────────────────────────────────────────
+
+fun generateInvoiceBitmap(invoice: Invoice, orgName: String): Bitmap {
+    val W = 1080
+    val pad = 60f
+    val colW = (W - pad * 2) / 6f
+
+    // Measure height needed
+    val lineH = 44f
+    val headerH = 200f
+    val billH = if (invoice.contactName != null) 120f else 0f
+    val tableH = 60f + invoice.items.size * lineH + 60f + 100f
+    val footerH = 80f
+    val totalH = (headerH + billH + tableH + footerH + 40f).toInt()
+
+    val bmp = Bitmap.createBitmap(W, totalH, Bitmap.Config.ARGB_8888)
+    val canvas = Canvas(bmp)
+
+    // Background
+    canvas.drawColor(android.graphics.Color.WHITE)
+
+    val blue = android.graphics.Color.parseColor("#1565C0")
+    val textDark = android.graphics.Color.parseColor("#0F172A")
+    val textGray = android.graphics.Color.parseColor("#475569")
+    val borderGray = android.graphics.Color.parseColor("#E2E8F0")
+    val bgLight = android.graphics.Color.parseColor("#F8FAFC")
+
+    val boldPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { typeface = Typeface.DEFAULT_BOLD }
+    val normalPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { typeface = Typeface.DEFAULT }
+
+    // Header blue box
+    val headerPaint = Paint().apply { color = blue }
+    canvas.drawRoundRect(pad, 30f, W - pad, 30f + headerH, 20f, 20f, headerPaint)
+
+    val whitePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.WHITE }
+    whitePaint.textSize = 36f
+    boldPaint.color = android.graphics.Color.WHITE; boldPaint.textSize = 36f
+    canvas.drawText(orgName, pad + 30f, 90f, boldPaint)
+
+    normalPaint.color = android.graphics.Color.argb(180, 255, 255, 255); normalPaint.textSize = 24f
+    canvas.drawText("INVOICE", pad + 30f, 140f, normalPaint)
+    boldPaint.textSize = 26f
+    canvas.drawText(invoice.invoiceNumber, pad + 30f, 174f, boldPaint)
+
+    normalPaint.textAlign = Paint.Align.RIGHT
+    canvas.drawText("DATE", W - pad - 30f, 140f, normalPaint)
+    boldPaint.textAlign = Paint.Align.RIGHT; boldPaint.textSize = 26f
+    canvas.drawText(formatInvoiceDate(invoice.createdAt ?: ""), W - pad - 30f, 174f, boldPaint)
+    normalPaint.textAlign = Paint.Align.LEFT; boldPaint.textAlign = Paint.Align.LEFT
+
+    var y = 30f + headerH + 30f
+
+    // Bill To
+    if (invoice.contactName != null) {
+        val bgPaint = Paint().apply { color = bgLight }
+        canvas.drawRoundRect(pad, y, W - pad, y + billH, 12f, 12f, bgPaint)
+
+        normalPaint.color = textGray; normalPaint.textSize = 22f
+        canvas.drawText("BILL TO", pad + 20f, y + 36f, normalPaint)
+        boldPaint.color = textDark; boldPaint.textSize = 30f
+        canvas.drawText(invoice.contactName, pad + 20f, y + 74f, boldPaint)
+        invoice.contactOrganisation?.let {
+            normalPaint.textSize = 24f; normalPaint.color = textGray
+            canvas.drawText(it, pad + 20f, y + 108f, normalPaint)
+        }
+        y += billH + 20f
+    }
+
+    // Table header row
+    val divPaint = Paint().apply { color = borderGray }
+    canvas.drawLine(pad, y, W - pad, y, divPaint.also { it.strokeWidth = 2f })
+    y += 10f
+
+    boldPaint.color = textGray; boldPaint.textSize = 22f
+    canvas.drawText("ITEM", pad, y + 30f, boldPaint)
+    boldPaint.textAlign = Paint.Align.CENTER
+    canvas.drawText("QTY", pad + colW * 2.5f + colW, y + 30f, boldPaint)
+    canvas.drawText("RATE", pad + colW * 3.5f + colW, y + 30f, boldPaint)
+    canvas.drawText("GST", pad + colW * 4.3f + colW, y + 30f, boldPaint)
+    boldPaint.textAlign = Paint.Align.RIGHT
+    canvas.drawText("TOTAL", W - pad, y + 30f, boldPaint)
+    boldPaint.textAlign = Paint.Align.LEFT
+    y += 44f
+    canvas.drawLine(pad, y, W - pad, y, divPaint)
+
+    // Items
+    normalPaint.color = textDark; normalPaint.textSize = 26f
+    invoice.items.forEach { item ->
+        y += 10f
+        canvas.drawText(item.name, pad, y + 28f, normalPaint)
+        normalPaint.textAlign = Paint.Align.CENTER
+        canvas.drawText(formatQty(item.qty), pad + colW * 2.5f + colW, y + 28f, normalPaint)
+        canvas.drawText("₹${formatAmt(item.rate)}", pad + colW * 3.5f + colW, y + 28f, normalPaint)
+        canvas.drawText("${item.gstPercent.toInt()}%", pad + colW * 4.3f + colW, y + 28f, normalPaint)
+        normalPaint.textAlign = Paint.Align.RIGHT
+        val gross = (item.lineTotal ?: (item.qty * item.rate)) + (item.lineTax ?: 0.0)
+        canvas.drawText("₹${formatAmt(gross)}", W - pad, y + 28f, normalPaint)
+        normalPaint.textAlign = Paint.Align.LEFT
+        y += lineH
+        val lightDiv = Paint().apply { color = android.graphics.Color.parseColor("#F1F5F9"); strokeWidth = 1f }
+        canvas.drawLine(pad, y, W - pad, y, lightDiv)
+    }
+
+    y += 20f
+    canvas.drawLine(pad, y, W - pad, y, divPaint)
+    y += 20f
+
+    // Totals
+    val totWidth = 400f
+    val totX = W - pad - totWidth
+
+    fun drawTotalRow(label: String, value: String, bold: Boolean = false, color: Int = textDark) {
+        val p = if (bold) boldPaint else normalPaint
+        p.color = textGray; p.textSize = 26f
+        canvas.drawText(label, totX, y + 28f, p)
+        p.textAlign = Paint.Align.RIGHT; p.color = color
+        if (bold) p.textSize = 32f
+        canvas.drawText(value, W - pad, y + 28f, p)
+        p.textAlign = Paint.Align.LEFT
+    }
+
+    drawTotalRow("Subtotal", "₹${formatAmt(invoice.subtotal)}")
+    y += lineH
+    drawTotalRow("GST", "₹${formatAmt(invoice.tax)}")
+    y += 10f
+    canvas.drawLine(totX, y, W - pad, y, divPaint.also { it.strokeWidth = 2f })
+    y += 14f
+    drawTotalRow("GRAND TOTAL", "₹${formatAmt(invoice.total)}", bold = true, color = blue)
+
+    y += lineH + 20f
+
+    // Footer
+    normalPaint.color = textGray; normalPaint.textSize = 22f; normalPaint.textAlign = Paint.Align.CENTER
+    canvas.drawText("Thank you for your business!", W / 2f, y + 24f, normalPaint)
+    normalPaint.textAlign = Paint.Align.LEFT
+
+    return bmp
+}
+
+fun shareInvoiceBitmap(context: Context, bmp: Bitmap, invoiceNumber: String) {
+    try {
+        val fileName = "invoice_${invoiceNumber.replace("/", "_")}_${System.currentTimeMillis()}.png"
+        val file = File(context.cacheDir, fileName)
+        FileOutputStream(file).use { out ->
+            bmp.compress(Bitmap.CompressFormat.PNG, 100, out)
+        }
+        val uri: Uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "image/png"
+            putExtra(Intent.EXTRA_STREAM, uri)
+            putExtra(Intent.EXTRA_TEXT, "Invoice $invoiceNumber")
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        context.startActivity(Intent.createChooser(intent, "Share Invoice").apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        })
+    } catch (e: Exception) {
+        e.printStackTrace()
     }
 }
 
