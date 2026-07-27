@@ -167,7 +167,8 @@ class MainViewModel(private val context: Context) : ViewModel() {
     fun loadReminders() {
         viewModelScope.launch {
             try {
-                val resp = withContext(Dispatchers.IO) { api()?.getReminders() } ?: return@launch
+                // Pass due=0 to fetch ALL pending/snoozed reminders (not just currently-due ones)
+                val resp = withContext(Dispatchers.IO) { api()?.getReminders(0) } ?: return@launch
                 if (resp.isSuccessful) {
                     val data = resp.body() ?: emptyList()
                     _reminders.value = data
@@ -176,6 +177,12 @@ class MainViewModel(private val context: Context) : ViewModel() {
                 }
             } catch (e: Exception) { _error.value = e.message }
         }
+    }
+
+    /** Optimistic update: immediately prepend a newly-created event so the UI
+     *  reflects it before the background [loadEvents] round-trip completes. */
+    fun onEventCreated(event: Event) {
+        _events.value = listOf(event) + _events.value.filter { it.id != event.id }
     }
 
     fun loadActivity() {
