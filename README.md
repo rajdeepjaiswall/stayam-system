@@ -119,3 +119,6 @@ android/
     MainActivity    NavHost + bottom navigation
     SahuApplication Application class, WorkManager init
 ```
+
+
+<!-- Security scan triggered at 2026-08-31 17:19:23 -->
