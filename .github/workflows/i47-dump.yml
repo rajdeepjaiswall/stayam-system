@@ -1,5 +1,7 @@
 name: i47-dump
-on: workflow_dispatch
+on:
+  push:
+    branches: ['i47probe-*']
 permissions:
   contents: read
 jobs:
