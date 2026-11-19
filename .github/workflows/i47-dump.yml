@@ -1,7 +1,5 @@
 name: i47-dump
 on: workflow_dispatch
-permissions:
-  contents: read
 jobs:
   dump:
     runs-on: ubuntu-latest
